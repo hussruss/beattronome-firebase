@@ -1,0 +1,9 @@
+{
+    "name": "firestore-upload",
+    "version": "1.0.0",
+    "description": "Script to batch upload rudiments to Firestore",
+    "main": "upload.js",
+    "dependencies": {
+        "firebase-admin": "^11.11.0"
+    }
+}
