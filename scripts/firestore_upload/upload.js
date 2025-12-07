@@ -14,6 +14,15 @@ const DATA_FILE_PATH = '../../assets/data/rudiments.json';
 const COLLECTION_NAME = 'rudiments';
 
 async function uploadData() {
+    // Get project ID from command line argument
+    const projectId = process.argv[2];
+
+    if (!projectId && !fs.existsSync(SERVICE_ACCOUNT_KEY_PATH)) {
+        console.error('Error: Please provide the project ID as an argument.');
+        console.error('Usage: node upload.js <project-id>');
+        process.exit(1);
+    }
+
     // Initialize Firebase Admin
     // 1. Try Service Account Key
     if (fs.existsSync(SERVICE_ACCOUNT_KEY_PATH)) {
@@ -25,10 +34,11 @@ async function uploadData() {
     } else {
         // 2. Try Application Default Credentials (ADC)
         // Requires running: gcloud auth application-default login
-        console.log('Service account key not found. Trying Application Default Credentials...');
+        console.log(`Service account key not found. Trying Application Default Credentials for project: ${projectId}...`);
         try {
             admin.initializeApp({
-                credential: admin.credential.applicationDefault()
+                credential: admin.credential.applicationDefault(),
+                projectId: projectId // Explicitly set project ID
             });
             console.log('Using Application Default Credentials.');
         } catch (e) {
