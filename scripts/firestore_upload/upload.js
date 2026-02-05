@@ -65,32 +65,51 @@ async function uploadData() {
             process.exit(1);
         }
 
-        console.log(`Found ${rudiments.length} rudiments to upload.`);
+        console.log(`Found ${rudiments.length} rudiments in JSON file.`);
+
+        // Fetch existing document IDs to determine create vs update
+        const existingDocs = await db.collection(COLLECTION_NAME).listDocuments();
+        const existingIds = new Set(existingDocs.map(doc => doc.id));
+        console.log(`Found ${existingIds.size} existing documents in Firestore.`);
 
         // Batch upload
         let batch = db.batch();
         let operationCount = 0;
         let totalUploaded = 0;
+        let totalCreated = 0;
+        let totalUpdated = 0;
 
         for (const rudiment of rudiments) {
             // Use existing ID or generate one
-            const docRef = rudiment.id
-                ? db.collection(COLLECTION_NAME).doc(rudiment.id)
-                : db.collection(COLLECTION_NAME).doc();
+            const id = rudiment.id || db.collection(COLLECTION_NAME).doc().id;
+            const docRef = db.collection(COLLECTION_NAME).doc(id);
 
             // Ensure ID is in the object
             if (!rudiment.id) {
-                rudiment.id = docRef.id;
+                rudiment.id = id;
             }
 
-            batch.set(docRef, rudiment);
+            if (existingIds.has(id)) {
+                // Update: remove rate and downloadCount to avoid overwriting them
+                const updateData = { ...rudiment };
+                delete updateData.rate;
+                delete updateData.downloadCount;
+
+                batch.set(docRef, updateData, { merge: true });
+                totalUpdated++;
+            } else {
+                // Create: upload all data
+                batch.set(docRef, rudiment);
+                totalCreated++;
+            }
+
             operationCount++;
 
             // Commit batch if limit reached (500)
             if (operationCount >= 499) {
                 await batch.commit();
                 totalUploaded += operationCount;
-                console.log(`Committed batch of ${operationCount} rudiments.`);
+                console.log(`Committed batch of ${operationCount} operations.`);
                 batch = db.batch();
                 operationCount = 0;
             }
@@ -100,8 +119,13 @@ async function uploadData() {
         if (operationCount > 0) {
             await batch.commit();
             totalUploaded += operationCount;
-            console.log(`Committed final batch of ${operationCount} rudiments.`);
+            console.log(`Committed final batch of ${operationCount} operations.`);
         }
+
+        console.log(`Process complete:`);
+        console.log(`- Total operations: ${totalUploaded}`);
+        console.log(`- New documents created: ${totalCreated}`);
+        console.log(`- Existing documents updated (preserving fields): ${totalUpdated}`);
 
         console.log(`Successfully uploaded ${totalUploaded} rudiments to ${COLLECTION_NAME}.`);
 
