@@ -1,4 +1,4 @@
 import "./admin";
 
 export { cleanupDuplicates } from "./cleanupDuplicates";
-export { notifyOnNewUser } from "./notifyOnNewUser";
+export { notifyOnNewInstallation } from "./notifyOnNewInstallation";
