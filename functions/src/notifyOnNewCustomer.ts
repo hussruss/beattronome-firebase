@@ -2,6 +2,7 @@ import "./admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import { sendPushToAdmins } from "./fcmHelpers";
+import { isNotificationEnabled } from "./notificationConfig";
 
 interface SubscriptionEntry {
   is_sandbox?: boolean;
@@ -42,6 +43,10 @@ export const notifyOnNewCustomer = onDocumentCreated(
     const snap = event.data;
     if (!snap) {
       logger.warn("notifyOnNewCustomer: missing snapshot");
+      return;
+    }
+    if (!(await isNotificationEnabled("on_new_customer"))) {
+      logger.info("notifyOnNewCustomer: muted via config");
       return;
     }
     const data = snap.data() as CustomerDoc;

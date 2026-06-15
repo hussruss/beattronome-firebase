@@ -2,6 +2,7 @@ import "./admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import { sendPushToAdmins } from "./fcmHelpers";
+import { isNotificationEnabled } from "./notificationConfig";
 
 interface InstallationDoc {
   user_id?: string;
@@ -27,6 +28,10 @@ export const notifyOnNewInstallation = onDocumentCreated(
     const snap = event.data;
     if (!snap) {
       logger.warn("notifyOnNewInstallation: missing snapshot");
+      return;
+    }
+    if (!(await isNotificationEnabled("on_new_installation"))) {
+      logger.info("notifyOnNewInstallation: muted via config");
       return;
     }
     const data = snap.data() as InstallationDoc;

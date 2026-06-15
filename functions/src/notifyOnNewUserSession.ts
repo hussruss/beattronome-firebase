@@ -2,6 +2,7 @@ import "./admin";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import { sendPushToAdmins } from "./fcmHelpers";
+import { isNotificationEnabled } from "./notificationConfig";
 
 interface UserSessionDoc {
   user_id?: string;
@@ -26,6 +27,10 @@ export const notifyOnNewUserSession = onDocumentCreated(
     const snap = event.data;
     if (!snap) {
       logger.warn("notifyOnNewUserSession: missing snapshot");
+      return;
+    }
+    if (!(await isNotificationEnabled("on_new_user_session"))) {
+      logger.info("notifyOnNewUserSession: muted via config");
       return;
     }
     const data = snap.data() as UserSessionDoc;

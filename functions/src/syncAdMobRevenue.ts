@@ -1,0 +1,187 @@
+import "./admin";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+import { logger } from "firebase-functions/v2";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import {
+  AdMobOAuthCreds,
+  DailyAppEarnings,
+  fetchAdMobEarnings,
+} from "./admobClient";
+
+const ADMOB_OAUTH_CLIENT_ID = defineSecret("ADMOB_OAUTH_CLIENT_ID");
+const ADMOB_OAUTH_CLIENT_SECRET = defineSecret("ADMOB_OAUTH_CLIENT_SECRET");
+const ADMOB_REFRESH_TOKEN = defineSecret("ADMOB_REFRESH_TOKEN");
+
+const PUBLISHER_ID = "pub-4008135751850421";
+const IOS_APP_ID = "ca-app-pub-4008135751850421~7022994604";
+const ANDROID_APP_ID = "ca-app-pub-4008135751850421~8473548475";
+const AD_REVENUE_COLLECTION = "ad_revenue";
+
+// AdMob estimates settle over ~72h, so we re-fetch the last 4 days every run.
+const DAILY_LOOKBACK_DAYS = 4;
+
+function creds(): AdMobOAuthCreds {
+  return {
+    clientId: ADMOB_OAUTH_CLIENT_ID.value(),
+    clientSecret: ADMOB_OAUTH_CLIENT_SECRET.value(),
+    refreshToken: ADMOB_REFRESH_TOKEN.value(),
+  };
+}
+
+function ymd(date: Date): string {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function aggregateByDate(rows: DailyAppEarnings[]): Map<
+  string,
+  { ios: number; android: number; total: number }
+> {
+  const byDate = new Map<
+    string,
+    { ios: number; android: number; total: number }
+  >();
+  for (const row of rows) {
+    const entry = byDate.get(row.date) ?? { ios: 0, android: 0, total: 0 };
+    if (row.appId === IOS_APP_ID) entry.ios += row.usd;
+    else if (row.appId === ANDROID_APP_ID) entry.android += row.usd;
+    entry.total += row.usd;
+    byDate.set(row.date, entry);
+  }
+  return byDate;
+}
+
+async function writeDailyDocs(
+  byDate: Map<string, { ios: number; android: number; total: number }>,
+): Promise<number> {
+  if (byDate.size === 0) return 0;
+  const db = getFirestore();
+  const col = db.collection(AD_REVENUE_COLLECTION);
+  const batch = db.batch();
+  for (const [date, totals] of byDate.entries()) {
+    batch.set(
+      col.doc(date),
+      {
+        date,
+        usd: totals.total,
+        ios_usd: totals.ios,
+        android_usd: totals.android,
+        fetched_at: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  }
+  await batch.commit();
+  return byDate.size;
+}
+
+async function syncRange(startYmd: string, endYmd: string): Promise<number> {
+  const rows = await fetchAdMobEarnings({
+    creds: creds(),
+    publisherId: PUBLISHER_ID,
+    appIds: [IOS_APP_ID, ANDROID_APP_ID],
+    startDate: startYmd,
+    endDate: endYmd,
+  });
+  const byDate = aggregateByDate(rows);
+  return writeDailyDocs(byDate);
+}
+
+export const syncAdMobRevenue = onSchedule(
+  {
+    schedule: "every day 06:00",
+    timeZone: "Etc/UTC",
+    region: "us-central1",
+    secrets: [
+      ADMOB_OAUTH_CLIENT_ID,
+      ADMOB_OAUTH_CLIENT_SECRET,
+      ADMOB_REFRESH_TOKEN,
+    ],
+    timeoutSeconds: 120,
+    memory: "256MiB",
+  },
+  async () => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
+    const startYmd = ymd(start);
+    const endYmd = ymd(now);
+    logger.info("syncAdMobRevenue: fetching", { startYmd, endYmd });
+    const written = await syncRange(startYmd, endYmd);
+    logger.info("syncAdMobRevenue: done", { written });
+  },
+);
+
+// Dashboard "sync now" button. Re-fetches the last 4 days like the scheduled
+// run does, so a user can refresh ARPU without waiting for 06:00 UTC.
+export const syncAdMobRevenueNow = onCall(
+  {
+    region: "us-central1",
+    secrets: [
+      ADMOB_OAUTH_CLIENT_ID,
+      ADMOB_OAUTH_CLIENT_SECRET,
+      ADMOB_REFRESH_TOKEN,
+    ],
+    timeoutSeconds: 120,
+    memory: "256MiB",
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const db = getFirestore();
+    const adminDoc = await db.collection("users_bo").doc(uid).get();
+    if (!adminDoc.exists) {
+      throw new HttpsError("permission-denied", "Backoffice users only.");
+    }
+    const now = new Date();
+    const start = new Date(now);
+    start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
+    const startYmd = ymd(start);
+    const endYmd = ymd(now);
+    logger.info("syncAdMobRevenueNow: triggered", { uid, startYmd, endYmd });
+    const written = await syncRange(startYmd, endYmd);
+    return { written, from: startYmd, to: endYmd };
+  },
+);
+
+// One-off backfill triggered manually. Pass ?from=YYYY-MM-DD&to=YYYY-MM-DD.
+// Guarded by a shared secret to avoid public abuse.
+export const syncAdMobRevenueBackfill = onRequest(
+  {
+    region: "us-central1",
+    secrets: [
+      ADMOB_OAUTH_CLIENT_ID,
+      ADMOB_OAUTH_CLIENT_SECRET,
+      ADMOB_REFRESH_TOKEN,
+    ],
+    timeoutSeconds: 300,
+    memory: "256MiB",
+  },
+  async (req, res) => {
+    const expected = ADMOB_REFRESH_TOKEN.value();
+    const provided = req.get("x-admin-token");
+    if (!provided || provided !== expected) {
+      res.status(403).send("forbidden");
+      return;
+    }
+    const from = String(req.query.from ?? "");
+    const to = String(req.query.to ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      res.status(400).send("from/to must be YYYY-MM-DD");
+      return;
+    }
+    try {
+      const written = await syncRange(from, to);
+      res.status(200).json({ from, to, written });
+    } catch (e) {
+      logger.error("backfill failed", { error: String(e) });
+      res.status(500).send(String(e));
+    }
+  },
+);
