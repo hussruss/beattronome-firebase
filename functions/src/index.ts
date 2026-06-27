@@ -9,3 +9,4 @@ export {
   syncAdMobRevenueNow,
   syncAdMobRevenueBackfill,
 } from "./syncAdMobRevenue";
+export { syncGa4, syncGa4Now } from "./syncGa4";

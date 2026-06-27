@@ -17,6 +17,7 @@
     "logs": "firebase functions:log"
   },
   "dependencies": {
+    "@google-analytics/data": "^4.0.0",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.0.0"
   },
