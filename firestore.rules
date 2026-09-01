@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    function isUser(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isUserSessionOwner() {
+      return request.auth != null && request.auth.uid == resource.data.authorId;
+    }
+
+    function isPublic() {
+      return resource.data.isPublic == true;
+    }
+
+    match /stories/{document=**} { allow read: if true; allow write: if isAdmin(); }
+    match /banners/{document=**} { allow read: if true; allow write: if isAdmin(); }
+    match /posts/{document=**} { allow read: if true; allow write: if isAdmin(); }
+
+    match /users/{uid} {
+      allow read, write: if isAdmin() || isUser(uid);
+    }
+
+    match /users_bo/{uid} {
+       allow read: if isAdmin() || isUser(uid);                                                                                                                                                                                    
+      allow update: if isUser(uid)                                                                                                                                                                                                
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                       .hasOnly(['fcmTokens', 'updatedAt', 'lastLoginAt', 'name', 'email', 'createdAt']);                                                                                                                       
+      allow write: if isAdmin();      
+    }
+
+    match /rudiments/{document=**} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount'])
+                        && request.resource.data.downloadCount == resource.data.downloadCount + 1);
+    }
+
+    match /my_rudiments/{uid} {
+      allow read, write: if isUser(uid);
+    }
+
+    match /patterns/{document=**} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount'])
+                        && request.resource.data.downloadCount == resource.data.downloadCount + 1);
+    }
+
+    match /my_patterns/{uid} {
+      allow read, write: if isUser(uid);
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isAdmin()
+                  || isPublic()
+                  || isUserSessionOwner();
+
+      allow create: if request.auth != null &&
+                      request.resource.data.authorId == request.auth.uid;
+
+      allow update: if request.auth != null &&
+                      resource.data.authorId == request.auth.uid &&
+                      request.resource.data.authorId == request.auth.uid;
+
+      allow delete: if request.auth != null &&
+                      resource.data.authorId == request.auth.uid;
+    }
+
+    // --- REGLAS PARA REVENUECAT ---
+    // Nota: Por defecto la extensión usa la colección "customers".
+    // Si en la configuración de la extensión le pusiste otro nombre
+    // (ej. "suscripciones"), cambia la palabra "customers" abajo por ese nombre.
+    match /customers/{uid} {
+      allow read: if isAdmin() || isUser(uid);
+    }
+
+    // Replace 'your_events_collection' with your actual events collection name
+    match /customers_events/{id} {
+      allow read: if isAdmin() || isUser(uid);
+    }
+
+    match /new_installations/{document} {
+      allow create: if true;
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+
+    }
+
+    match /user_sessions/{document} {
+      allow create: if true;
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+
+    }
+
+    match /activity_logs/{document} {
+      allow create: if true;
+      allow read: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /ad_revenue/{document} {
+      allow read: if isAdmin();
+    }
+    
+    match /config/{document} {                                                                                                                                                                                                                              
+    	allow read, write: if isAdmin();                                                                                                                                                                                                                             
+  	} 
+
+    // --- BLOQUEO FINAL ---
+    // Bloquear TODO lo demás (Siempre deja esto al final)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}
