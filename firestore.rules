@@ -60,6 +60,15 @@ service cloud.firestore {
       allow read, write: if isUser(uid);
     }
 
+    match /grooves/{document=**} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount'])
+                        && request.resource.data.downloadCount == resource.data.downloadCount + 1);
+    }
+
     match /sessions/{sessionId} {
       allow read: if isAdmin()
                   || isPublic()
