@@ -259,3 +259,53 @@ export const syncGa4Now = onCall(
     return { ...result, from: startYmd, to: endYmd };
   },
 );
+
+/** Active users right now (GA4's realtime window — the last ~30 minutes),
+ * plus a top-5 breakdown by country. Unlike everything else in this file,
+ * this is NOT synced into Firestore on a schedule — realtime numbers going
+ * through a once-a-day batch job would defeat the point. The dashboard
+ * calls this callable directly, live, whenever the realtime card wants a
+ * fresh read. */
+export const getGa4Realtime = onCall(
+  {
+    region: "us-central1",
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) {
+      throw new HttpsError("unauthenticated", "Sign in required.");
+    }
+    const db = getFirestore();
+    const adminDoc = await db.collection("users_bo").doc(uid).get();
+    if (!adminDoc.exists) {
+      throw new HttpsError("permission-denied", "Backoffice users only.");
+    }
+
+    const [totalResp, countryResp] = await Promise.all([
+      client().runRealtimeReport({
+        property: `properties/${GA4_PROPERTY_ID}`,
+        metrics: [{ name: "activeUsers" }],
+      }),
+      client().runRealtimeReport({
+        property: `properties/${GA4_PROPERTY_ID}`,
+        dimensions: [{ name: "country" }],
+        metrics: [{ name: "activeUsers" }],
+        orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+        limit: 5,
+      }),
+    ]);
+
+    const activeUsers = Number(
+      totalResp[0].rows?.[0]?.metricValues?.[0]?.value ?? "0",
+    );
+    const byCountry = (countryResp[0].rows ?? []).map((row) => ({
+      country: row.dimensionValues?.[0]?.value ?? "Unknown",
+      activeUsers: Number(row.metricValues?.[0]?.value ?? "0"),
+    }));
+
+    logger.info("getGa4Realtime: fetched", { uid, activeUsers });
+    return { activeUsers, byCountry };
+  },
+);
