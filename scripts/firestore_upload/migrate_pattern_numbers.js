@@ -3,6 +3,9 @@ const path = require('path');
 const { initAdmin, renumber } = require('./renumber_lib');
 
 const COLLECTION_NAME = 'patterns';
+const ID_PREFIX = 'pattern';
+const USER_COLLECTION_NAME = 'my_patterns';
+const USER_ARRAY_FIELD = 'patterns';
 const DEFAULT_MOVES_FILE = path.join(__dirname, 'pattern_moves.json');
 
 async function main() {
@@ -16,7 +19,7 @@ async function main() {
     console.error(`No se encontró el archivo de moves: ${movesFile}`);
     console.error('');
     console.error('Uso: node migrate_pattern_numbers.js <project-id> [moves-file.json] [--apply]');
-    console.error('Formato del JSON: {"1": 41, "3": 42}  (número actual -> número nuevo)');
+    console.error('Formato del JSON: {"1": 41, "3": 42}  (pattern_<actual> -> pattern_<nuevo>, sufijo del id, no el campo number)');
     console.error(`Copia pattern_moves.example.json a ${path.basename(DEFAULT_MOVES_FILE)} y edítalo, o pasa tu propia ruta.`);
     process.exit(1);
   }
@@ -25,7 +28,17 @@ async function main() {
   const db = initAdmin(projectId);
 
   try {
-    await renumber(db, COLLECTION_NAME, moves, { apply });
+    await renumber(
+      db,
+      {
+        collectionName: COLLECTION_NAME,
+        idPrefix: ID_PREFIX,
+        userCollectionName: USER_COLLECTION_NAME,
+        userArrayField: USER_ARRAY_FIELD,
+      },
+      moves,
+      { apply },
+    );
   } finally {
     process.exit(0);
   }
