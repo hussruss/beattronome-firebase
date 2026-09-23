@@ -19,6 +19,7 @@ export interface DailyAppEarnings {
   date: string; // YYYY-MM-DD
   appId: string; // ca-app-pub-...
   usd: number;
+  impressions: number;
 }
 
 interface AccessTokenResponse {
@@ -93,7 +94,7 @@ export async function fetchAdMobEarnings(
       endDate: ymdToDateObj(params.endDate),
     },
     dimensions: ["DATE", "APP"],
-    metrics: ["ESTIMATED_EARNINGS"],
+    metrics: ["ESTIMATED_EARNINGS", "IMPRESSIONS"],
     localizationSettings: { currencyCode: "USD", languageCode: "en-US" },
     timeZone: params.timeZone ?? "America/Los_Angeles",
   };
@@ -141,9 +142,11 @@ export async function fetchAdMobEarnings(
     const dateRaw = r.row.dimensionValues?.DATE?.value;
     const appId = r.row.dimensionValues?.APP?.value;
     const micros = r.row.metricValues?.ESTIMATED_EARNINGS?.microsValue;
+    const impressionsRaw = r.row.metricValues?.IMPRESSIONS?.integerValue;
     if (!dateRaw || !appId) continue;
     const usd = micros ? Number(micros) / 1_000_000 : 0;
-    out.push({ date: admobDateToYmd(dateRaw), appId, usd });
+    const impressions = impressionsRaw ? Number(impressionsRaw) : 0;
+    out.push({ date: admobDateToYmd(dateRaw), appId, usd, impressions });
   }
 
   logger.info("AdMob report parsed", {

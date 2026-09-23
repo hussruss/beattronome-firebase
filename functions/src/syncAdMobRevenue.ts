@@ -37,26 +37,42 @@ function ymd(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
-function aggregateByDate(rows: DailyAppEarnings[]): Map<
-  string,
-  { ios: number; android: number; total: number }
-> {
-  const byDate = new Map<
-    string,
-    { ios: number; android: number; total: number }
-  >();
+interface DailyTotals {
+  ios: number;
+  android: number;
+  total: number;
+  iosImpressions: number;
+  androidImpressions: number;
+  totalImpressions: number;
+}
+
+function aggregateByDate(rows: DailyAppEarnings[]): Map<string, DailyTotals> {
+  const byDate = new Map<string, DailyTotals>();
   for (const row of rows) {
-    const entry = byDate.get(row.date) ?? { ios: 0, android: 0, total: 0 };
-    if (row.appId === IOS_APP_ID) entry.ios += row.usd;
-    else if (row.appId === ANDROID_APP_ID) entry.android += row.usd;
+    const entry = byDate.get(row.date) ?? {
+      ios: 0,
+      android: 0,
+      total: 0,
+      iosImpressions: 0,
+      androidImpressions: 0,
+      totalImpressions: 0,
+    };
+    if (row.appId === IOS_APP_ID) {
+      entry.ios += row.usd;
+      entry.iosImpressions += row.impressions;
+    } else if (row.appId === ANDROID_APP_ID) {
+      entry.android += row.usd;
+      entry.androidImpressions += row.impressions;
+    }
     entry.total += row.usd;
+    entry.totalImpressions += row.impressions;
     byDate.set(row.date, entry);
   }
   return byDate;
 }
 
 async function writeDailyDocs(
-  byDate: Map<string, { ios: number; android: number; total: number }>,
+  byDate: Map<string, DailyTotals>,
 ): Promise<number> {
   if (byDate.size === 0) return 0;
   const db = getFirestore();
@@ -70,6 +86,9 @@ async function writeDailyDocs(
         usd: totals.total,
         ios_usd: totals.ios,
         android_usd: totals.android,
+        impressions: totals.totalImpressions,
+        ios_impressions: totals.iosImpressions,
+        android_impressions: totals.androidImpressions,
         fetched_at: FieldValue.serverTimestamp(),
       },
       { merge: true },

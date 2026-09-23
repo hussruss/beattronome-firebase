@@ -9,6 +9,7 @@ import { BetaAnalyticsDataClient } from "@google-analytics/data";
 const GA4_PROPERTY_ID = "353313516";
 const UNINSTALLS_COLLECTION = "ga4_uninstalls";
 const EVENTS_DAILY_COLLECTION = "ga4_events_daily";
+const USERS_DAILY_COLLECTION = "ga4_users_daily";
 
 // GA4 finalises data over ~24-48h, so we re-fetch the last few days each run.
 const DAILY_LOOKBACK_DAYS = 3;
@@ -106,13 +107,51 @@ async function fetchCustomEventsByDate(
   return byDate;
 }
 
+interface DailyUsers {
+  activeUsers: number;
+  newUsers: number;
+  totalUsers: number;
+}
+
+/** Active/new/total users per day — GA4's own rolling definitions, not a
+ * custom derivation. `totalUsers` counts anyone active in the requested
+ * range at all, so it isn't `activeUsers` summed across days. */
+async function fetchUsersByDate(
+  startYmd: string,
+  endYmd: string,
+): Promise<Map<string, DailyUsers>> {
+  const [resp] = await client().runReport({
+    property: `properties/${GA4_PROPERTY_ID}`,
+    dateRanges: [{ startDate: startYmd, endDate: endYmd }],
+    dimensions: [{ name: "date" }],
+    metrics: [
+      { name: "activeUsers" },
+      { name: "newUsers" },
+      { name: "totalUsers" },
+    ],
+  });
+  const byDate = new Map<string, DailyUsers>();
+  for (const row of resp.rows ?? []) {
+    const rawDate = row.dimensionValues?.[0]?.value;
+    if (!rawDate) continue;
+    byDate.set(ga4DateToYmd(rawDate), {
+      activeUsers: Number(row.metricValues?.[0]?.value ?? "0"),
+      newUsers: Number(row.metricValues?.[1]?.value ?? "0"),
+      totalUsers: Number(row.metricValues?.[2]?.value ?? "0"),
+    });
+  }
+  return byDate;
+}
+
 async function syncRange(startYmd: string, endYmd: string): Promise<{
   uninstallDays: number;
   eventDays: number;
+  userDays: number;
 }> {
-  const [uninstalls, events] = await Promise.all([
+  const [uninstalls, events, users] = await Promise.all([
     fetchUninstallsByDate(startYmd, endYmd),
     fetchCustomEventsByDate(startYmd, endYmd),
+    fetchUsersByDate(startYmd, endYmd),
   ]);
 
   const db = getFirestore();
@@ -137,8 +176,21 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
     });
   }
 
+  const usersCol = db.collection(USERS_DAILY_COLLECTION);
+  for (const [date, counts] of users.entries()) {
+    batch.set(
+      usersCol.doc(date),
+      { date, ...counts, fetched_at: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+  }
+
   await batch.commit();
-  return { uninstallDays: uninstalls.size, eventDays: events.size };
+  return {
+    uninstallDays: uninstalls.size,
+    eventDays: events.size,
+    userDays: users.size,
+  };
 }
 
 function lookbackRange(): { startYmd: string; endYmd: string } {
