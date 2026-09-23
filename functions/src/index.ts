@@ -10,3 +10,8 @@ export {
   syncAdMobRevenueBackfill,
 } from "./syncAdMobRevenue";
 export { syncGa4, syncGa4Now } from "./syncGa4";
+export { syncPlayConsole, syncPlayConsoleNow } from "./syncPlayConsole";
+export {
+  syncAppStoreConnect,
+  syncAppStoreConnectNow,
+} from "./syncAppStoreConnect";
