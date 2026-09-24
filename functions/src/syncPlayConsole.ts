@@ -1,10 +1,10 @@
 // Google Play Console installs/uninstalls/active-devices sync.
 //
-// NOT WIRED UP YET: needs PLAY_CONSOLE_BUCKET set (see the comment at the
-// top of playConsoleClient.ts for how to find it in Play Console) and the
-// Cloud Functions runtime service account granted "Storage Object Viewer"
-// on that bucket. Until then this throws on first use — expected, not a
-// bug to chase.
+// Needs PLAY_CONSOLE_BUCKET set (functions/.env) and the Cloud Functions
+// runtime service account invited as a Play Console user with "View app
+// information and download bulk reports (read-only)" — see the comment at
+// the top of playConsoleClient.ts for exactly how/where. Until both of
+// those are done this throws on first use — expected, not a bug to chase.
 
 import "./admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";

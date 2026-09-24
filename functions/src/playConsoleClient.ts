@@ -6,15 +6,27 @@
 // Storage bucket, which is what this reads instead.
 //
 // Setup (manual, in Play Console — not something this code can do):
-//   1. Play Console > Setup > API access — the Play Console account needs
-//      to be linked to the SAME Google Cloud project this Firebase
-//      project lives in (or note whichever project it's linked to).
-//   2. Play Console > Download reports (left sidebar) shows the bucket
-//      name Play writes to — looks like "pubsite_prod_rev_XXXXXXXXXXXXX".
-//      That's the value PLAY_CONSOLE_BUCKET needs in syncPlayConsole.ts.
-//   3. Grant the Cloud Functions runtime service account "Storage Object
-//      Viewer" on that bucket (IAM, in Cloud Console) — Play's own
-//      process writes the files, this function only ever reads them.
+//   1. Play Console > Download reports > Statistics (pick the right app in
+//      the top-right app selector) shows a "Copy Cloud Storage URI" button
+//      per report section, and expanding a month's rows exposes direct
+//      https://storage.cloud.google.com/<bucket>/... download links — the
+//      bucket segment is the value PLAY_CONSOLE_BUCKET needs, e.g.
+//      "pubsite_prod_<play developer account ID>".
+//   2. This bucket is Google-managed, NOT a bucket inside this Firebase
+//      project's own Cloud project — it does not show up under this
+//      project's Cloud Storage / IAM in Cloud Console, and granting IAM
+//      roles on it there does nothing (confirmed: Console reports
+//      "missing storage.buckets.getIamPolicy permission" when trying).
+//      Real access is granted through Play Console itself: Users and
+//      permissions > Invite new users > enter the Cloud Functions runtime
+//      service account's email (Cloud Run service's Security tab, or
+//      YAML > `run.googleapis.com/build-service-account` — commonly
+//      "<project-number>-compute@developer.gserviceaccount.com" when no
+//      App Engine default service account exists) > Account permissions >
+//      check "View app information and download bulk reports (read-only)"
+//      (no financial-data permission needed, this function only reads
+//      install/uninstall stats, not revenue). Service-account invites
+//      auto-accept immediately, no separate confirmation step.
 //
 // Reports land as monthly CSVs, appended to as the month progresses:
 //   stats/installs/installs_<packageName>_<YYYYMM>_overview.csv
