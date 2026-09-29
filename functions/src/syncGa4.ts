@@ -167,13 +167,21 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
   ]);
 
   const db = getFirestore();
-  const batch = db.batch();
+  // BulkWriter, not a batch: a batch caps at 500 writes (~3 per day here),
+  // which would fail any backfill longer than ~5 months.
+  const writer = db.bulkWriter();
+  // Handler attached per write so a failure can't surface as an unhandled
+  // rejection while close() is still flushing.
+  const failures: unknown[] = [];
+  const track = (write: Promise<unknown>): void => {
+    write.catch((e: unknown) => failures.push(e));
+  };
 
   const uninstallsCol = db.collection(UNINSTALLS_COLLECTION);
   // `count` stays the uninstall figure (existing docs/readers rely on it);
   // `first_open` sits alongside it on the same day-doc.
   for (const [date, day] of uninstalls.entries()) {
-    batch.set(
+    track(writer.set(
       uninstallsCol.doc(date),
       {
         date,
@@ -182,29 +190,33 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
         fetched_at: FieldValue.serverTimestamp(),
       },
       { merge: true },
-    );
+    ));
   }
 
   const eventsCol = db.collection(EVENTS_DAILY_COLLECTION);
   for (const [date, eventCounts] of events.entries()) {
     // Overwrite the day's events with the freshly-fetched totals.
-    batch.set(eventsCol.doc(date), {
+    track(writer.set(eventsCol.doc(date), {
       date,
       events: eventCounts,
       fetched_at: FieldValue.serverTimestamp(),
-    });
+    }));
   }
 
   const usersCol = db.collection(USERS_DAILY_COLLECTION);
   for (const [date, counts] of users.entries()) {
-    batch.set(
+    track(writer.set(
       usersCol.doc(date),
       { date, ...counts, fetched_at: FieldValue.serverTimestamp() },
       { merge: true },
-    );
+    ));
   }
 
-  await batch.commit();
+  await writer.close();
+  // Any write that still failed after BulkWriter's own retries.
+  if (failures.length > 0) {
+    throw new Error(`syncGa4: ${failures.length} Firestore write(s) failed`);
+  }
   return {
     uninstallDays: uninstalls.size,
     eventDays: events.size,
