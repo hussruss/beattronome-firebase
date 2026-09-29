@@ -53,29 +53,41 @@ function ga4DateToYmd(value: string): string {
   return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
 }
 
-/** Uninstalls (`app_remove`) per day. Android only — iOS does not report it. */
-async function fetchUninstallsByDate(
+interface DailyInstallChurn {
+  uninstalls: number;
+  firstOpens: number;
+}
+
+/** Uninstalls (`app_remove`, Android only — iOS does not report it) and
+ * first opens (`first_open`, both platforms) per day, in one report so the
+ * dashboard can chart installs vs. losses from the same doc. */
+async function fetchInstallChurnByDate(
   startYmd: string,
   endYmd: string,
-): Promise<Map<string, number>> {
+): Promise<Map<string, DailyInstallChurn>> {
   const [resp] = await client().runReport({
     property: `properties/${GA4_PROPERTY_ID}`,
     dateRanges: [{ startDate: startYmd, endDate: endYmd }],
-    dimensions: [{ name: "date" }],
+    dimensions: [{ name: "date" }, { name: "eventName" }],
     metrics: [{ name: "eventCount" }],
     dimensionFilter: {
       filter: {
         fieldName: "eventName",
-        stringFilter: { matchType: "EXACT", value: "app_remove" },
+        inListFilter: { values: ["app_remove", "first_open"] },
       },
     },
   });
-  const byDate = new Map<string, number>();
+  const byDate = new Map<string, DailyInstallChurn>();
   for (const row of resp.rows ?? []) {
     const rawDate = row.dimensionValues?.[0]?.value;
+    const eventName = row.dimensionValues?.[1]?.value;
     const count = Number(row.metricValues?.[0]?.value ?? "0");
-    if (!rawDate) continue;
-    byDate.set(ga4DateToYmd(rawDate), count);
+    if (!rawDate || !eventName) continue;
+    const date = ga4DateToYmd(rawDate);
+    const day = byDate.get(date) ?? { uninstalls: 0, firstOpens: 0 };
+    if (eventName === "app_remove") day.uninstalls += count;
+    else day.firstOpens += count;
+    byDate.set(date, day);
   }
   return byDate;
 }
@@ -149,7 +161,7 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
   userDays: number;
 }> {
   const [uninstalls, events, users] = await Promise.all([
-    fetchUninstallsByDate(startYmd, endYmd),
+    fetchInstallChurnByDate(startYmd, endYmd),
     fetchCustomEventsByDate(startYmd, endYmd),
     fetchUsersByDate(startYmd, endYmd),
   ]);
@@ -158,10 +170,17 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
   const batch = db.batch();
 
   const uninstallsCol = db.collection(UNINSTALLS_COLLECTION);
-  for (const [date, count] of uninstalls.entries()) {
+  // `count` stays the uninstall figure (existing docs/readers rely on it);
+  // `first_open` sits alongside it on the same day-doc.
+  for (const [date, day] of uninstalls.entries()) {
     batch.set(
       uninstallsCol.doc(date),
-      { date, count, fetched_at: FieldValue.serverTimestamp() },
+      {
+        date,
+        count: day.uninstalls,
+        first_open: day.firstOpens,
+        fetched_at: FieldValue.serverTimestamp(),
+      },
       { merge: true },
     );
   }
