@@ -10,6 +10,10 @@ export {
   syncAdMobRevenueBackfill,
 } from "./syncAdMobRevenue";
 export { syncGa4, syncGa4Now, getGa4Realtime } from "./syncGa4";
+export {
+  syncUninstallPaths,
+  syncUninstallPathsNow,
+} from "./syncUninstallPaths";
 export { syncPlayConsole, syncPlayConsoleNow } from "./syncPlayConsole";
 export {
   syncAppStoreConnect,
