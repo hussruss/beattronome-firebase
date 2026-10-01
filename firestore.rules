@@ -121,6 +121,37 @@ service cloud.firestore {
     match /ad_revenue/{document} {
       allow read: if isAdmin();
     }
+
+    // GA4 / Play Console / App Store Connect sync collections — written
+    // only by the backoffice Cloud Functions via the Admin SDK (which
+    // bypasses these rules), read-only from the backoffice dashboard.
+    match /ga4_uninstalls/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_events_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_users_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_uninstall_paths_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /play_console_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /asc_installs_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /asc_engagement_daily/{document} {
+      allow read: if isAdmin();
+    }
     
     match /config/{document} {                                                                                                                                                                                                                              
     	allow read, write: if isAdmin();                                                                                                                                                                                                                             
