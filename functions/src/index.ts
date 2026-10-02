@@ -7,7 +7,6 @@ export { notifyOnNewCustomer } from "./notifyOnNewCustomer";
 export {
   syncAdMobRevenue,
   syncAdMobRevenueNow,
-  syncAdMobRevenueBackfill,
 } from "./syncAdMobRevenue";
 export { syncGa4, syncGa4Now, getGa4Realtime } from "./syncGa4";
 export {

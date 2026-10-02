@@ -1,6 +1,6 @@
 import "./admin";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
@@ -145,7 +145,7 @@ export const syncAdMobRevenueNow = onCall(
       ADMOB_OAUTH_CLIENT_SECRET,
       ADMOB_REFRESH_TOKEN,
     ],
-    timeoutSeconds: 120,
+    timeoutSeconds: 300,
     memory: "256MiB",
   },
   async (request) => {
@@ -158,49 +158,28 @@ export const syncAdMobRevenueNow = onCall(
     if (!adminDoc.exists) {
       throw new HttpsError("permission-denied", "Backoffice users only.");
     }
-    const now = new Date();
-    const start = new Date(now);
-    start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
-    const startYmd = ymd(start);
-    const endYmd = ymd(now);
+    // Dashboard sync button. Pass {from, to} (YYYY-MM-DD) to backfill the
+    // selected range; otherwise re-fetches the lookback window. Replaces the
+    // old public, token-guarded HTTP backfill endpoint.
+    const data = (request.data ?? {}) as { from?: string; to?: string };
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    let startYmd: string;
+    let endYmd: string;
+    if (data.from && data.to) {
+      if (!dateRe.test(data.from) || !dateRe.test(data.to)) {
+        throw new HttpsError("invalid-argument", "from/to must be YYYY-MM-DD");
+      }
+      startYmd = data.from;
+      endYmd = data.to;
+    } else {
+      const now = new Date();
+      const start = new Date(now);
+      start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
+      startYmd = ymd(start);
+      endYmd = ymd(now);
+    }
     logger.info("syncAdMobRevenueNow: triggered", { uid, startYmd, endYmd });
     const written = await syncRange(startYmd, endYmd);
     return { written, from: startYmd, to: endYmd };
-  },
-);
-
-// One-off backfill triggered manually. Pass ?from=YYYY-MM-DD&to=YYYY-MM-DD.
-// Guarded by a shared secret to avoid public abuse.
-export const syncAdMobRevenueBackfill = onRequest(
-  {
-    region: "us-central1",
-    secrets: [
-      ADMOB_OAUTH_CLIENT_ID,
-      ADMOB_OAUTH_CLIENT_SECRET,
-      ADMOB_REFRESH_TOKEN,
-    ],
-    timeoutSeconds: 300,
-    memory: "256MiB",
-  },
-  async (req, res) => {
-    const expected = ADMOB_REFRESH_TOKEN.value();
-    const provided = req.get("x-admin-token");
-    if (!provided || provided !== expected) {
-      res.status(403).send("forbidden");
-      return;
-    }
-    const from = String(req.query.from ?? "");
-    const to = String(req.query.to ?? "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
-      res.status(400).send("from/to must be YYYY-MM-DD");
-      return;
-    }
-    try {
-      const written = await syncRange(from, to);
-      res.status(200).json({ from, to, written });
-    } catch (e) {
-      logger.error("backfill failed", { error: String(e) });
-      res.status(500).send(String(e));
-    }
   },
 );
