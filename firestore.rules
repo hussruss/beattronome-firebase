@@ -93,9 +93,10 @@ service cloud.firestore {
       allow read: if isAdmin() || isUser(uid);
     }
 
-    // Replace 'your_events_collection' with your actual events collection name
+    // RevenueCat extension events — only the backoffice dashboard reads
+    // them. (Was `isUser(uid)` with no `uid` in scope: always false.)
     match /customers_events/{id} {
-      allow read: if isAdmin() || isUser(uid);
+      allow read: if isAdmin();
     }
 
     match /new_installations/{document} {
