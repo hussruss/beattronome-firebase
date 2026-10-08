@@ -165,6 +165,13 @@
       },
       "description": "One ad per N stops, counted on top of the cooldown and scoped to the stop placements. The cooldown caps by time; a long practice session eventually clears it on every stop, so counting the stops themselves is what keeps the placement bearable. 1 disables the throttle. Only a real impression spends the window.",
       "valueType": "NUMBER"
+    },
+    "paywall_variant": {
+      "defaultValue": {
+        "value": "contextual"
+      },
+      "description": "Paywall layout arm: contextual | benefits | comparison. Driven by Firebase A/B Testing; unknown values fall back to contextual. Latched once per launch.",
+      "valueType": "STRING"
     }
   }
 }
