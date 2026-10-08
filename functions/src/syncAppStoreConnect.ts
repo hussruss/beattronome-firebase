@@ -46,6 +46,7 @@ import {
   listRecentInstances,
   parseTsv,
 } from "./appStoreConnectClient";
+import { sumNumericColumnsByDate } from "./parsing";
 
 const ASC_KEY_ID = defineSecret("ASC_KEY_ID");
 const ASC_ISSUER_ID = defineSecret("ASC_ISSUER_ID");
@@ -77,30 +78,6 @@ function appId(): string {
     );
   }
   return id;
-}
-
-/** Sums every numeric column present in `rows`, grouped by `dateColumn`,
- * keyed by (lowercased, space-stripped) column name. Column names Apple
- * doesn't actually send just don't appear — nothing to hardcode wrong. */
-function sumNumericColumnsByDate(
-  rows: Record<string, string>[],
-  dateColumn: string,
-): Map<string, Record<string, number>> {
-  const byDate = new Map<string, Record<string, number>>();
-  for (const row of rows) {
-    const date = row[dateColumn];
-    if (!date) continue;
-    const day = byDate.get(date) ?? {};
-    for (const [key, raw] of Object.entries(row)) {
-      if (key === dateColumn) continue;
-      const value = Number(raw);
-      if (!Number.isFinite(value)) continue; // skip non-numeric columns
-      const field = key.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-      day[field] = (day[field] ?? 0) + value;
-    }
-    byDate.set(date, day);
-  }
-  return byDate;
 }
 
 async function fetchLatestReportRows(

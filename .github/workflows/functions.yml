@@ -1,0 +1,25 @@
+name: functions
+
+on:
+  push:
+    paths: ["functions/**", ".github/workflows/functions.yml"]
+  pull_request:
+    paths: ["functions/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # 22.6+ for --experimental-strip-types in `npm test`.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test

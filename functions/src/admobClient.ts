@@ -6,6 +6,7 @@
 // functions/scripts/get-admob-refresh-token.mjs for the one-time bootstrap.
 
 import { logger } from "firebase-functions/v2";
+import { compactDateToYmd } from "./parsing";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -77,12 +78,6 @@ function ymdToDateObj(ymd: string): { year: number; month: number; day: number }
   return { year: y, month: m, day: d };
 }
 
-function admobDateToYmd(value: string): string {
-  // AdMob returns "YYYYMMDD" for DATE dimension
-  if (value.length !== 8) return value;
-  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
-}
-
 export async function fetchAdMobEarnings(
   params: FetchEarningsParams,
 ): Promise<DailyAppEarnings[]> {
@@ -146,7 +141,7 @@ export async function fetchAdMobEarnings(
     if (!dateRaw || !appId) continue;
     const usd = micros ? Number(micros) / 1_000_000 : 0;
     const impressions = impressionsRaw ? Number(impressionsRaw) : 0;
-    out.push({ date: admobDateToYmd(dateRaw), appId, usd, impressions });
+    out.push({ date: compactDateToYmd(dateRaw), appId, usd, impressions });
   }
 
   logger.info("AdMob report parsed", {

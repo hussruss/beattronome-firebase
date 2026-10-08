@@ -4,6 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { BigQuery } from "@google-cloud/bigquery";
+import { median, tally, utcYmd } from "./parsing";
 
 // "What did users do right before uninstalling?" — read from the GA4
 // BigQuery export (one row per event, per user), which the GA4 Data API
@@ -45,14 +46,10 @@ function bq(): BigQuery {
   return bigQueryClient;
 }
 
-function ymd(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
 function addDays(dayYmd: string, days: number): string {
   const d = new Date(`${dayYmd}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + days);
-  return ymd(d);
+  return utcYmd(d);
 }
 
 const suffix = (dayYmd: string): string => dayYmd.replace(/-/g, "");
@@ -126,22 +123,6 @@ async function fetchUninstallers(dayYmd: string): Promise<UninstallRow[]> {
   return rows as UninstallRow[];
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-function tally(keys: (string | null)[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const k of keys) {
-    if (!k) continue;
-    out[k] = (out[k] ?? 0) + 1;
-  }
-  return out;
-}
-
 /** Aggregates one day's uninstallers into the Firestore day-doc the
  * dashboard reads. Counts are users, not events. */
 async function syncDay(dayYmd: string): Promise<number> {
@@ -189,7 +170,7 @@ async function syncRange(startYmd: string, endYmd: string): Promise<number> {
 }
 
 function lookbackRange(): { startYmd: string; endYmd: string } {
-  const yesterday = addDays(ymd(new Date()), -1);
+  const yesterday = addDays(utcYmd(new Date()), -1);
   return { startYmd: addDays(yesterday, -(DAILY_LOOKBACK_DAYS - 1)), endYmd: yesterday };
 }
 

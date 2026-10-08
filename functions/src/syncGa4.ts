@@ -4,6 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
+import { compactDateToYmd, utcYmd } from "./parsing";
 
 // Production GA4 property "beattronome-ea8b2".
 const GA4_PROPERTY_ID = "353313516";
@@ -41,18 +42,6 @@ function client(): BetaAnalyticsDataClient {
   return analyticsClient;
 }
 
-function ymd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-// GA4 `date` dimension comes back as "YYYYMMDD".
-function ga4DateToYmd(value: string): string {
-  return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`;
-}
-
 interface DailyInstallChurn {
   uninstalls: number;
   firstOpens: number;
@@ -83,7 +72,7 @@ async function fetchInstallChurnByDate(
     const eventName = row.dimensionValues?.[1]?.value;
     const count = Number(row.metricValues?.[0]?.value ?? "0");
     if (!rawDate || !eventName) continue;
-    const date = ga4DateToYmd(rawDate);
+    const date = compactDateToYmd(rawDate);
     const day = byDate.get(date) ?? { uninstalls: 0, firstOpens: 0 };
     if (eventName === "app_remove") day.uninstalls += count;
     else day.firstOpens += count;
@@ -111,7 +100,7 @@ async function fetchCustomEventsByDate(
     const count = Number(row.metricValues?.[0]?.value ?? "0");
     if (!rawDate || !eventName) continue;
     if (AUTOMATIC_EVENTS.has(eventName)) continue;
-    const date = ga4DateToYmd(rawDate);
+    const date = compactDateToYmd(rawDate);
     const day = byDate.get(date) ?? {};
     day[eventName] = (day[eventName] ?? 0) + count;
     byDate.set(date, day);
@@ -146,7 +135,7 @@ async function fetchUsersByDate(
   for (const row of resp.rows ?? []) {
     const rawDate = row.dimensionValues?.[0]?.value;
     if (!rawDate) continue;
-    byDate.set(ga4DateToYmd(rawDate), {
+    byDate.set(compactDateToYmd(rawDate), {
       activeUsers: Number(row.metricValues?.[0]?.value ?? "0"),
       newUsers: Number(row.metricValues?.[1]?.value ?? "0"),
       totalUsers: Number(row.metricValues?.[2]?.value ?? "0"),
@@ -228,7 +217,7 @@ function lookbackRange(): { startYmd: string; endYmd: string } {
   const now = new Date();
   const start = new Date(now);
   start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
-  return { startYmd: ymd(start), endYmd: ymd(now) };
+  return { startYmd: utcYmd(start), endYmd: utcYmd(now) };
 }
 
 export const syncGa4 = onSchedule(

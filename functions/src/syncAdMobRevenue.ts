@@ -6,9 +6,9 @@ import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import {
   AdMobOAuthCreds,
-  DailyAppEarnings,
   fetchAdMobEarnings,
 } from "./admobClient";
+import { aggregateEarningsByDate, DailyTotals, utcYmd } from "./parsing";
 
 const ADMOB_OAUTH_CLIENT_ID = defineSecret("ADMOB_OAUTH_CLIENT_ID");
 const ADMOB_OAUTH_CLIENT_SECRET = defineSecret("ADMOB_OAUTH_CLIENT_SECRET");
@@ -28,47 +28,6 @@ function creds(): AdMobOAuthCreds {
     clientSecret: ADMOB_OAUTH_CLIENT_SECRET.value(),
     refreshToken: ADMOB_REFRESH_TOKEN.value(),
   };
-}
-
-function ymd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-interface DailyTotals {
-  ios: number;
-  android: number;
-  total: number;
-  iosImpressions: number;
-  androidImpressions: number;
-  totalImpressions: number;
-}
-
-function aggregateByDate(rows: DailyAppEarnings[]): Map<string, DailyTotals> {
-  const byDate = new Map<string, DailyTotals>();
-  for (const row of rows) {
-    const entry = byDate.get(row.date) ?? {
-      ios: 0,
-      android: 0,
-      total: 0,
-      iosImpressions: 0,
-      androidImpressions: 0,
-      totalImpressions: 0,
-    };
-    if (row.appId === IOS_APP_ID) {
-      entry.ios += row.usd;
-      entry.iosImpressions += row.impressions;
-    } else if (row.appId === ANDROID_APP_ID) {
-      entry.android += row.usd;
-      entry.androidImpressions += row.impressions;
-    }
-    entry.total += row.usd;
-    entry.totalImpressions += row.impressions;
-    byDate.set(row.date, entry);
-  }
-  return byDate;
 }
 
 async function writeDailyDocs(
@@ -106,7 +65,7 @@ async function syncRange(startYmd: string, endYmd: string): Promise<number> {
     startDate: startYmd,
     endDate: endYmd,
   });
-  const byDate = aggregateByDate(rows);
+  const byDate = aggregateEarningsByDate(rows, IOS_APP_ID, ANDROID_APP_ID);
   return writeDailyDocs(byDate);
 }
 
@@ -127,8 +86,8 @@ export const syncAdMobRevenue = onSchedule(
     const now = new Date();
     const start = new Date(now);
     start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
-    const startYmd = ymd(start);
-    const endYmd = ymd(now);
+    const startYmd = utcYmd(start);
+    const endYmd = utcYmd(now);
     logger.info("syncAdMobRevenue: fetching", { startYmd, endYmd });
     const written = await syncRange(startYmd, endYmd);
     logger.info("syncAdMobRevenue: done", { written });
@@ -175,8 +134,8 @@ export const syncAdMobRevenueNow = onCall(
       const now = new Date();
       const start = new Date(now);
       start.setUTCDate(start.getUTCDate() - DAILY_LOOKBACK_DAYS);
-      startYmd = ymd(start);
-      endYmd = ymd(now);
+      startYmd = utcYmd(start);
+      endYmd = utcYmd(now);
     }
     logger.info("syncAdMobRevenueNow: triggered", { uid, startYmd, endYmd });
     const written = await syncRange(startYmd, endYmd);

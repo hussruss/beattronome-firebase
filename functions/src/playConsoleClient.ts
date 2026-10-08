@@ -36,6 +36,7 @@
 
 import { Storage } from "@google-cloud/storage";
 import { logger } from "firebase-functions/v2";
+import { decodePlayCsv, numOrZero, parseCsv } from "./parsing";
 
 let storage: Storage | null = null;
 function client(): Storage {
@@ -51,37 +52,6 @@ export interface PlayConsoleDailyRow {
   dailyUserInstalls: number;
   dailyUserUninstalls: number;
   totalUserInstalls: number;
-}
-
-// Play's overview CSVs are UTF-16LE with a byte-order mark, not UTF-8
-// like most CSVs — decoding as UTF-8 would produce garbled/empty fields.
-function decode(buffer: Buffer): string {
-  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
-    return buffer.toString("utf16le", 2);
-  }
-  return buffer.toString("utf-8");
-}
-
-function parseCsv(text: string): Record<string, string>[] {
-  const lines = text
-    .split("\n")
-    .map((l) => l.replace(/\r$/, ""))
-    .filter((l) => l.length > 0);
-  if (lines.length === 0) return [];
-  const headers = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line) => {
-    const cells = line.split(",");
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = (cells[i] ?? "").trim();
-    });
-    return row;
-  });
-}
-
-function num(row: Record<string, string>, key: string): number {
-  const value = Number(row[key]);
-  return Number.isFinite(value) ? value : 0;
 }
 
 /** Reads one month's "overview" installs CSV. Returns an empty array if
@@ -101,16 +71,16 @@ export async function fetchMonthlyOverview(
     return [];
   }
   const [buffer] = await file.download();
-  const rows = parseCsv(decode(buffer));
+  const rows = parseCsv(decodePlayCsv(buffer));
   return rows
     .map((row) => ({
       date: (row["Date"] ?? "").trim(),
-      dailyDeviceInstalls: num(row, "Daily Device Installs"),
-      dailyDeviceUninstalls: num(row, "Daily Device Uninstalls"),
-      activeDeviceInstalls: num(row, "Active Device Installs"),
-      dailyUserInstalls: num(row, "Daily User Installs"),
-      dailyUserUninstalls: num(row, "Daily User Uninstalls"),
-      totalUserInstalls: num(row, "Total User Installs"),
+      dailyDeviceInstalls: numOrZero(row, "Daily Device Installs"),
+      dailyDeviceUninstalls: numOrZero(row, "Daily Device Uninstalls"),
+      activeDeviceInstalls: numOrZero(row, "Active Device Installs"),
+      dailyUserInstalls: numOrZero(row, "Daily User Installs"),
+      dailyUserUninstalls: numOrZero(row, "Daily User Uninstalls"),
+      totalUserInstalls: numOrZero(row, "Total User Installs"),
     }))
     .filter((r) => r.date.length > 0);
 }

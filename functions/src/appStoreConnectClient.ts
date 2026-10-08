@@ -246,21 +246,5 @@ export async function downloadInstanceSegments(
   return out;
 }
 
-/** Parses Apple's tab-separated analytics report format into records
- * keyed by header name — resilient to Apple reordering/adding columns,
- * as long as the names this pipeline looks up by stay the same. */
-export function parseTsv(text: string): Record<string, string>[] {
-  const lines = text.split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return [];
-  const headers = lines[0].split("\t");
-  const rows: Record<string, string>[] = [];
-  for (const line of lines.slice(1)) {
-    const cells = line.split("\t");
-    const row: Record<string, string> = {};
-    headers.forEach((h, i) => {
-      row[h] = cells[i] ?? "";
-    });
-    rows.push(row);
-  }
-  return rows;
-}
+// Kept importable from here for existing callers; lives in ./parsing.
+export { parseTsv } from "./parsing";
