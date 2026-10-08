@@ -60,6 +60,15 @@ service cloud.firestore {
       allow read, write: if isUser(uid);
     }
 
+    match /grooves/{document=**} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+                    || (request.auth != null
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['downloadCount'])
+                        && request.resource.data.downloadCount == resource.data.downloadCount + 1);
+    }
+
     match /sessions/{sessionId} {
       allow read: if isAdmin()
                   || isPublic()
@@ -84,9 +93,10 @@ service cloud.firestore {
       allow read: if isAdmin() || isUser(uid);
     }
 
-    // Replace 'your_events_collection' with your actual events collection name
+    // RevenueCat extension events — only the backoffice dashboard reads
+    // them. (Was `isUser(uid)` with no `uid` in scope: always false.)
     match /customers_events/{id} {
-      allow read: if isAdmin() || isUser(uid);
+      allow read: if isAdmin();
     }
 
     match /new_installations/{document} {
@@ -110,6 +120,37 @@ service cloud.firestore {
     }
 
     match /ad_revenue/{document} {
+      allow read: if isAdmin();
+    }
+
+    // GA4 / Play Console / App Store Connect sync collections — written
+    // only by the backoffice Cloud Functions via the Admin SDK (which
+    // bypasses these rules), read-only from the backoffice dashboard.
+    match /ga4_uninstalls/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_events_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_users_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_uninstall_paths_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /play_console_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /asc_installs_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /asc_engagement_daily/{document} {
       allow read: if isAdmin();
     }
     
