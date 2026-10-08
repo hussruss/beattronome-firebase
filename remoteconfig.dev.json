@@ -1,0 +1,170 @@
+{
+  "parameters": {
+    "ad_gate_type": {
+      "defaultValue": {
+        "value": "rewarded"
+      },
+      "description": "interstitial | rewarded",
+      "valueType": "STRING"
+    },
+    "ad_slot_advance": {
+      "defaultValue": {
+        "value": "native"
+      },
+      "description": "off | banner | native",
+      "valueType": "STRING"
+    },
+    "ad_slot_basic": {
+      "defaultValue": {
+        "value": "off"
+      },
+      "description": "off | banner | native",
+      "valueType": "STRING"
+    },
+    "ad_slot_patterns": {
+      "defaultValue": {
+        "value": "native"
+      },
+      "description": "off | banner | native",
+      "valueType": "STRING"
+    },
+    "ad_slot_rudiments": {
+      "defaultValue": {
+        "value": "native"
+      },
+      "description": "off | banner | native",
+      "valueType": "STRING"
+    },
+    "ad_slot_two_pizzas": {
+      "defaultValue": {
+        "value": "native"
+      },
+      "description": "off | banner | native",
+      "valueType": "STRING"
+    },
+    "aha_moment_threshold_seconds": {
+      "defaultValue": {
+        "value": "10"
+      },
+      "valueType": "NUMBER"
+    },
+    "interstitial_frequency_cap_seconds": {
+      "defaultValue": {
+        "value": "30"
+      },
+      "description": "Serconds",
+      "valueType": "NUMBER"
+    },
+    "is_ad_backoff_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Backoff after a failed load cycle: 1 min doubling to 30 min. Read live. Turn OFF if fill drops and impressions suffer.",
+      "valueType": "BOOLEAN"
+    },
+    "is_ad_impression_logging_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "One Firestore write per real ad impression, into activity_logs. Feeds the back-office ads-per-session card. Fine for a months-long measurement, not for leaving on forever.",
+      "valueType": "BOOLEAN"
+    },
+    "is_aha_moment_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "is_ads_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Master ad switch for the no-ads test. false vetoes every format (banner, native, interstitial, rewarded, app-open) and the local house promo. Premium content stays paywalled; free content that normally costs an ad just opens. Denials still log ad_trigger_denied with deny_reason=ads_disabled; GA4 user property ads_enabled tags the arm. Activates on the next app launch.",
+      "valueType": "BOOLEAN"
+    },
+    "is_app_open_ad_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "App-open ad on launch. Own format and own flow. Ships OFF: it is the first thing a user sees, which makes it the highest-risk placement in the app. Respects the basic-mode lever using the mode the launch RESTORES INTO.",
+      "valueType": "BOOLEAN"
+    },
+    "is_basic_mode_ads_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Whether basic mode participates in advertising at all. App-wide, shared by every placement that respects it. Does not enable anything by itself — a placement still needs its own switch.",
+      "valueType": "BOOLEAN"
+    },
+    "is_interstitial_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Kill switch for interstitials. Gate 4 of AdTriggerService.",
+      "valueType": "BOOLEAN"
+    },
+    "is_posthog_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "PostHog analytics sink. GA4 is unaffected. Needs POSTHOG_API_KEY in the build for the sink to come up at all.",
+      "valueType": "BOOLEAN"
+    },
+    "is_rewarded_enabled": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Kill switch for rewarded ads. Gate 4 of AdTriggerService.",
+      "valueType": "BOOLEAN"
+    },
+    "is_settings_ad_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Fullscreen ad when a settings sheet closes after a change. Two extra rules are hard-coded and NOT configurable: never in basic mode, never while the metronome is playing.",
+      "valueType": "BOOLEAN"
+    },
+    "is_stop_metronome_ad_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Interstitial when the metronome is stopped, preloaded on play. Ships OFF: stopping is part of the practice loop, so the cooldown is the only thing keeping it tolerable.",
+      "valueType": "BOOLEAN"
+    },
+    "is_stop_training_ad_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Interstitial when a tempo-training run ends, preloaded on start. Ships OFF for the same reason.",
+      "valueType": "BOOLEAN"
+    },
+    "min_required_version": {
+      "defaultValue": {
+        "value": ""
+      },
+      "description": "Oldest semantic version allowed to run, e.g. 1.5.2. Empty means no floor. Anything unparseable is ignored rather than blocking: the failure mode of this gate is the entire app becoming unusable, so it fails open.",
+      "valueType": "STRING"
+    },
+    "min_seconds_between_fullscreen_ads": {
+      "defaultValue": {
+        "value": "90"
+      },
+      "description": "Minimum gap between ANY two fullscreen ads, on top of each format cap. Guards the try(rewarded) -> download(interstitial) double toll.",
+      "valueType": "NUMBER"
+    },
+    "mode_change_ad_format": {
+      "defaultValue": {
+        "value": "interstitial"
+      },
+      "description": "interstitial | rewarded. Mode-change placement ONLY, so the experiment isolates one variable. The rewarded arm asks for opt-in first (AdMob requires it); declining still changes the mode.",
+      "valueType": "STRING"
+    },
+    "stop_ad_show_every_n_stops": {
+      "defaultValue": {
+        "value": "3"
+      },
+      "description": "One ad per N stops, counted on top of the cooldown and scoped to the stop placements. The cooldown caps by time; a long practice session eventually clears it on every stop, so counting the stops themselves is what keeps the placement bearable. 1 disables the throttle. Only a real impression spends the window.",
+      "valueType": "NUMBER"
+    }
+  }
+}
