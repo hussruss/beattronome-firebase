@@ -18,3 +18,7 @@ export {
   syncAppStoreConnect,
   syncAppStoreConnectNow,
 } from "./syncAppStoreConnect";
+export {
+  aggregatePractice,
+  aggregatePracticeNow,
+} from "./aggregatePractice";
