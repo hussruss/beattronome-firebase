@@ -15,7 +15,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   where,
@@ -162,6 +164,8 @@ describe("subscriptions and analytics", () => {
     "play_console_daily",
     "asc_installs_daily",
     "asc_engagement_daily",
+    "practice_daily",
+    "practice_weekly",
   ]) {
     test(`${name}: admin read only, no client writes`, async () => {
       await seed(`${name}/d`, { v: 1 });
@@ -170,6 +174,82 @@ describe("subscriptions and analytics", () => {
       await assertFails(setDoc(doc(admin(), `${name}/d2`), { v: 1 }));
     });
   }
+});
+
+describe("practice_days", () => {
+  // Same shape the app writes: set+merge with increments.
+  const run = (userKey, date = "2026-10-08", extra = {}) => ({
+    user_key: userKey,
+    date,
+    anon_id: "install-1",
+    is_premium: true,
+    seconds: increment(90),
+    runs: increment(1),
+    modes: { rudiments: increment(90) },
+    content: { "rudiment:12": increment(90) },
+    app_version: "1.7.0",
+    platform: "Android",
+    last_at: serverTimestamp(),
+    ...extra,
+  });
+  const merge = { merge: true };
+
+  test("a user upserts only their own day doc", async () => {
+    const ref = doc(user("alice"), "practice_days/alice_2026-10-08");
+    await assertSucceeds(setDoc(ref, run("alice"), merge));
+    // Second run the same day: update with increments.
+    await assertSucceeds(setDoc(ref, run("alice"), merge));
+    await assertFails(
+      setDoc(doc(user("bob"), "practice_days/alice_2026-10-08"), run("alice"), merge),
+    );
+    await assertFails(
+      setDoc(doc(user("bob"), "practice_days/bob_2026-10-08"), run("alice"), merge),
+    );
+  });
+
+  test("doc id must be {user_key}_{date}", async () => {
+    await assertFails(
+      setDoc(doc(user("alice"), "practice_days/alice_2026-10-09"), run("alice"), merge),
+    );
+    await assertFails(
+      setDoc(doc(user("alice"), "practice_days/whatever"), run("alice"), merge),
+    );
+  });
+
+  test("rejects malformed data", async () => {
+    const ref = doc(user("alice"), "practice_days/alice_2026-10-08");
+    await assertFails(setDoc(ref, run("alice", "2026-10-08", { hacked: true }), merge));
+    await assertFails(setDoc(ref, run("alice", "2026-10-08", { seconds: 999999 }), merge));
+    await assertFails(setDoc(ref, run("alice", "2026-10-08", { seconds: "90" }), merge));
+    await assertFails(setDoc(ref, run("alice", "2026-10-08", { is_premium: "yes" }), merge));
+    await assertFails(setDoc(ref, run("alice", "2026-10-08", { modes: 3 }), merge));
+    await assertFails(
+      setDoc(doc(user("alice"), "practice_days/alice_08-10-2026"),
+        run("alice", "08-10-2026"), merge),
+    );
+  });
+
+  test("without auth only anon: keys are accepted", async () => {
+    await assertSucceeds(
+      setDoc(doc(guest(), "practice_days/anon:install-1_2026-10-08"),
+        run("anon:install-1"), merge),
+    );
+    await assertFails(
+      setDoc(doc(guest(), "practice_days/alice_2026-10-08"), run("alice"), merge),
+    );
+    // A signed-in user can't write anon docs either.
+    await assertFails(
+      setDoc(doc(user("alice"), "practice_days/anon:install-1_2026-10-08"),
+        run("anon:install-1"), merge),
+    );
+  });
+
+  test("only admins read or delete", async () => {
+    await seed("practice_days/alice_2026-10-08", { user_key: "alice", date: "2026-10-08" });
+    await assertFails(getDoc(doc(user("alice"), "practice_days/alice_2026-10-08")));
+    await assertFails(deleteDoc(doc(user("alice"), "practice_days/alice_2026-10-08")));
+    await assertSucceeds(getDoc(doc(admin(), "practice_days/alice_2026-10-08")));
+  });
 });
 
 test("anything not listed is closed", async () => {
