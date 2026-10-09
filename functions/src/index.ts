@@ -22,3 +22,4 @@ export {
   aggregatePractice,
   aggregatePracticeNow,
 } from "./aggregatePractice";
+export { mergeGuestData } from "./mergeGuestData";
