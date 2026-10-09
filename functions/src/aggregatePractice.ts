@@ -30,7 +30,7 @@ const DAILY_LOOKBACK_DAYS = 3;
 // First app version that writes practice_days. Subscribers on older
 // versions can't show up in the numerator, so they are left out of the
 // denominator too. UPDATE to the actual release version before deploying.
-const PRACTICE_MIN_APP_VERSION = "1.7.0";
+const PRACTICE_MIN_APP_VERSION = "1.6.1";
 
 function localYmd(date: Date): string {
   // en-CA formats as YYYY-MM-DD.
