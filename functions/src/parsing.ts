@@ -157,3 +157,31 @@ export function tally(keys: (string | null)[]): Record<string, number> {
   }
   return out;
 }
+
+/** One country in the realtime card. `countryId` is GA4's ISO 3166-1
+ * alpha-2 code (for the flag); null when GA4 has none ("(not set)"). */
+export interface RealtimeCountry {
+  country: string;
+  countryId: string | null;
+  activeUsers: number;
+}
+
+interface ReportRow {
+  dimensionValues?: { value?: string | null }[] | null;
+  metricValues?: { value?: string | null }[] | null;
+}
+
+/** Rows of a realtime report with dimensions `[country, countryId]` and
+ * metric `activeUsers`. */
+export function parseRealtimeCountries(
+  rows: ReportRow[] | null | undefined,
+): RealtimeCountry[] {
+  return (rows ?? []).map((row) => {
+    const code = row.dimensionValues?.[1]?.value ?? "";
+    return {
+      country: row.dimensionValues?.[0]?.value || "Unknown",
+      countryId: /^[A-Za-z]{2}$/.test(code) ? code.toUpperCase() : null,
+      activeUsers: Number(row.metricValues?.[0]?.value ?? "0") || 0,
+    };
+  });
+}

@@ -4,7 +4,7 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
-import { compactDateToYmd, utcYmd } from "./parsing";
+import { compactDateToYmd, parseRealtimeCountries, utcYmd } from "./parsing";
 
 // Production GA4 property "beattronome-ea8b2".
 const GA4_PROPERTY_ID = "353313516";
@@ -310,7 +310,8 @@ export const getGa4Realtime = onCall(
       }),
       client().runRealtimeReport({
         property: `properties/${GA4_PROPERTY_ID}`,
-        dimensions: [{ name: "country" }],
+        // countryId (ISO 3166-1 alpha-2) lets the dashboard show the flag.
+        dimensions: [{ name: "country" }, { name: "countryId" }],
         metrics: [{ name: "activeUsers" }],
         orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
         limit: 5,
@@ -320,10 +321,7 @@ export const getGa4Realtime = onCall(
     const activeUsers = Number(
       totalResp[0].rows?.[0]?.metricValues?.[0]?.value ?? "0",
     );
-    const byCountry = (countryResp[0].rows ?? []).map((row) => ({
-      country: row.dimensionValues?.[0]?.value ?? "Unknown",
-      activeUsers: Number(row.metricValues?.[0]?.value ?? "0"),
-    }));
+    const byCountry = parseRealtimeCountries(countryResp[0].rows);
 
     logger.info("getGa4Realtime: fetched", { uid, activeUsers });
     return { activeUsers, byCountry };

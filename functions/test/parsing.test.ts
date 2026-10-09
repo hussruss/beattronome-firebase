@@ -9,6 +9,7 @@ import {
   median,
   numOrZero,
   parseCsv,
+  parseRealtimeCountries,
   parseTsv,
   sumNumericColumnsByDate,
   tally,
@@ -117,4 +118,26 @@ test("median handles empty, odd and even inputs without mutating", () => {
 
 test("tally counts keys and ignores null/empty", () => {
   assert.deepEqual(tally(["a", "b", "a", null, ""]), { a: 2, b: 1 });
+});
+
+test("parseRealtimeCountries keeps the ISO code for the flag", () => {
+  assert.deepEqual(
+    parseRealtimeCountries([
+      {
+        dimensionValues: [{ value: "Mexico" }, { value: "MX" }],
+        metricValues: [{ value: "7" }],
+      },
+      {
+        dimensionValues: [{ value: "(not set)" }, { value: "(not set)" }],
+        metricValues: [{ value: "1" }],
+      },
+      { dimensionValues: [{ value: "Spain" }], metricValues: [] },
+    ]),
+    [
+      { country: "Mexico", countryId: "MX", activeUsers: 7 },
+      { country: "(not set)", countryId: null, activeUsers: 1 },
+      { country: "Spain", countryId: null, activeUsers: 0 },
+    ],
+  );
+  assert.deepEqual(parseRealtimeCountries(undefined), []);
 });
