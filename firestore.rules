@@ -146,6 +146,25 @@ service cloud.firestore {
       allow read, delete: if isAdmin();
     }
 
+    // Guest → existing account: the app asks the backoffice
+    // `mergeGuestData` function to move the guest's data. Only the account
+    // itself may ask, and only with the guest's ID token (checked by the
+    // function, which also deletes it). No client updates or deletes.
+    match /guest_merges/{mergeId} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['account_uid', 'guest_uid',
+                                                 'guest_id_token', 'status',
+                                                 'created_at'])
+        && request.resource.data.account_uid == request.auth.uid
+        && request.resource.data.guest_uid is string
+        && request.resource.data.guest_uid != request.auth.uid
+        && request.resource.data.guest_id_token is string
+        && request.resource.data.status == 'pending';
+      allow read: if isAdmin()
+        || (request.auth != null
+            && resource.data.account_uid == request.auth.uid);
+    }
+
     // Aggregates written by the backoffice (Admin SDK bypasses rules).
     match /practice_daily/{document} { allow read: if isAdmin(); }
     match /practice_weekly/{document} { allow read: if isAdmin(); }

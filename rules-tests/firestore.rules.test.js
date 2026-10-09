@@ -252,6 +252,43 @@ describe("practice_days", () => {
   });
 });
 
+describe("guest_merges", () => {
+  const request = (account, guest = "guestA", extra = {}) => ({
+    account_uid: account,
+    guest_uid: guest,
+    guest_id_token: "jwt",
+    status: "pending",
+    created_at: serverTimestamp(),
+    ...extra,
+  });
+
+  test("the signed-in account may ask to merge a guest into itself", async () => {
+    await assertSucceeds(addDoc(collection(user("bob"), "guest_merges"), request("bob")));
+  });
+
+  test("nobody asks on behalf of another account", async () => {
+    await assertFails(addDoc(collection(user("mallory"), "guest_merges"), request("bob")));
+    await assertFails(addDoc(collection(guest(), "guest_merges"), request("bob")));
+  });
+
+  test("rejects merging into itself, extra fields and a pre-set status", async () => {
+    const col = collection(user("bob"), "guest_merges");
+    await assertFails(addDoc(col, request("bob", "bob")));
+    await assertFails(addDoc(col, request("bob", "guestA", { hacked: true })));
+    await assertFails(addDoc(col, request("bob", "guestA", { status: "done" })));
+    await assertFails(addDoc(col, request("bob", "guestA", { guest_id_token: 42 })));
+  });
+
+  test("only the account (or an admin) reads it; nobody updates or deletes", async () => {
+    await seed("guest_merges/m1", { account_uid: "bob", guest_uid: "guestA", status: "done" });
+    await assertSucceeds(getDoc(doc(user("bob"), "guest_merges/m1")));
+    await assertFails(getDoc(doc(user("mallory"), "guest_merges/m1")));
+    await assertSucceeds(getDoc(doc(admin(), "guest_merges/m1")));
+    await assertFails(updateDoc(doc(user("bob"), "guest_merges/m1"), { status: "pending" }));
+    await assertFails(deleteDoc(doc(user("bob"), "guest_merges/m1")));
+  });
+});
+
 test("anything not listed is closed", async () => {
   await assertFails(getDoc(doc(admin(), "secrets/x")));
   await assertFails(setDoc(doc(user(), "secrets/x"), { a: 1 }));
