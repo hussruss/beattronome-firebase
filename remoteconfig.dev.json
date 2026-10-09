@@ -142,7 +142,7 @@
       "defaultValue": {
         "value": ""
       },
-      "description": "Oldest semantic version allowed to run, e.g. 1.5.2. Empty means no floor. Anything unparseable is ignored rather than blocking: the failure mode of this gate is the entire app becoming unusable, so it fails open.",
+      "description": "Oldest semantic version allowed to run, e.g. 1.5.2. ONLY a version already live in BOTH stores. Never test by changing the default: use a build-number condition. Empty means no floor. Unparseable values never block.",
       "valueType": "STRING"
     },
     "min_seconds_between_fullscreen_ads": {
