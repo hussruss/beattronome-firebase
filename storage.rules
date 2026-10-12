@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Firebase Storage rules. Deploy from this folder:
+//   firebase deploy --only storage --project beattronome-ea8b2
+// Tests: rules-tests/storage.rules.test.js (CI runs them on every change).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    // Every file the apps use is a public picture one level deep: the
+    // catalogue's (the Studio uploads {docId}.{ext} to rudiments/,
+    // patterns/ and grooves/) and the feed's (banners/, posts/, stories/,
+    // and the post pictures under rudiments/, patterns/ and sessions/).
+    // The app shows them to everyone, guests included; only the
+    // backoffice's admins upload or delete them.
+    function isPublicFolder(folder) {
+      return folder in ['rudiments', 'patterns', 'grooves', 'banners',
+                        'posts', 'stories', 'sessions'];
+    }
+
+    match /{folder}/{file} {
+      // get, not list: the apps open files by name and never browse.
+      allow get: if isPublicFolder(folder);
+      allow delete: if isAdmin() && isPublicFolder(folder);
+      allow create, update: if isAdmin()
+        && isPublicFolder(folder)
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

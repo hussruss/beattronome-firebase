@@ -2,9 +2,9 @@ name: firestore-rules
 
 on:
   push:
-    paths: ["firestore.rules", "rules-tests/**", ".github/workflows/firestore-rules.yml"]
+    paths: ["firestore.rules", "storage.rules", "rules-tests/**", ".github/workflows/firestore-rules.yml"]
   pull_request:
-    paths: ["firestore.rules", "rules-tests/**"]
+    paths: ["firestore.rules", "storage.rules", "rules-tests/**"]
 
 jobs:
   rules:
@@ -24,4 +24,7 @@ jobs:
           cache: npm
           cache-dependency-path: rules-tests/package-lock.json
       - run: npm ci
-      - run: npx -y firebase-tools@latest emulators:exec --only firestore --project demo-beattronome "npm test"
+      # From the repo root: the Storage emulator needs firebase.json to
+      # name its rules.
+      - run: npx -y firebase-tools@latest emulators:exec --only firestore,storage --project demo-beattronome "npm --prefix rules-tests test"
+        working-directory: .
