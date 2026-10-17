@@ -192,6 +192,28 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
 
+    // Dashboard: ad health (AdMob), versions in use (GA4), and the
+    // BigQuery aggregates (ad triggers, retention, new-user funnel).
+    match /ad_health_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_versions_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_ad_triggers_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_retention_daily/{document} {
+      allow read: if isAdmin();
+    }
+
+    match /ga4_funnel_daily/{document} {
+      allow read: if isAdmin();
+    }
+
     match /play_console_daily/{document} {
       allow read: if isAdmin();
     }
