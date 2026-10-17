@@ -4,13 +4,20 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
-import { compactDateToYmd, parseRealtimeCountries, utcYmd } from "./parsing";
+import {
+  compactDateToYmd,
+  parseRealtimeCountries,
+  parseVersionRows,
+  utcYmd,
+  VersionUsers,
+} from "./parsing";
 
 // Production GA4 property "beattronome-ea8b2".
 const GA4_PROPERTY_ID = "353313516";
 const UNINSTALLS_COLLECTION = "ga4_uninstalls";
 const EVENTS_DAILY_COLLECTION = "ga4_events_daily";
 const USERS_DAILY_COLLECTION = "ga4_users_daily";
+const VERSIONS_DAILY_COLLECTION = "ga4_versions_daily";
 
 // GA4 finalises data over ~24-48h, so we re-fetch the last few days each run.
 const DAILY_LOOKBACK_DAYS = 3;
@@ -144,15 +151,37 @@ async function fetchUsersByDate(
   return byDate;
 }
 
+/** Active users per day, platform and app version: which versions are
+ * still in use. */
+async function fetchVersionsByDate(
+  startYmd: string,
+  endYmd: string,
+): Promise<Map<string, VersionUsers[]>> {
+  const [resp] = await client().runReport({
+    property: `properties/${GA4_PROPERTY_ID}`,
+    dateRanges: [{ startDate: startYmd, endDate: endYmd }],
+    dimensions: [
+      { name: "date" },
+      { name: "platform" },
+      { name: "appVersion" },
+    ],
+    metrics: [{ name: "activeUsers" }],
+    limit: 100000,
+  });
+  return parseVersionRows(resp.rows);
+}
+
 async function syncRange(startYmd: string, endYmd: string): Promise<{
   uninstallDays: number;
   eventDays: number;
   userDays: number;
+  versionDays: number;
 }> {
-  const [uninstalls, events, users] = await Promise.all([
+  const [uninstalls, events, users, versions] = await Promise.all([
     fetchInstallChurnByDate(startYmd, endYmd),
     fetchCustomEventsByDate(startYmd, endYmd),
     fetchUsersByDate(startYmd, endYmd),
+    fetchVersionsByDate(startYmd, endYmd),
   ]);
 
   const db = getFirestore();
@@ -201,6 +230,16 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
     ));
   }
 
+  const versionsCol = db.collection(VERSIONS_DAILY_COLLECTION);
+  for (const [date, rows] of versions.entries()) {
+    // Replaced whole: a version that stopped showing up must not linger.
+    track(writer.set(versionsCol.doc(date), {
+      date,
+      rows,
+      fetched_at: FieldValue.serverTimestamp(),
+    }));
+  }
+
   await writer.close();
   // Any write that still failed after BulkWriter's own retries.
   if (failures.length > 0) {
@@ -210,6 +249,7 @@ async function syncRange(startYmd: string, endYmd: string): Promise<{
     uninstallDays: uninstalls.size,
     eventDays: events.size,
     userDays: users.size,
+    versionDays: versions.size,
   };
 }
 

@@ -4,11 +4,15 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { BigQuery } from "@google-cloud/bigquery";
-import { median, tally, utcYmd } from "./parsing";
+import { addDays, median, tally, utcYmd } from "./parsing";
+import { syncInsightsDay } from "./ga4Insights";
 
 // "What did users do right before uninstalling?" — read from the GA4
 // BigQuery export (one row per event, per user), which the GA4 Data API
 // can't answer. Android only: iOS never reports `app_remove`.
+//
+// Each synced day also runs the other BigQuery aggregates (ad triggers,
+// retention, new-user funnel; see ga4Insights.ts).
 //
 // Needs GA4 Admin → BigQuery links set up (daily export) for property
 // 353313516 into this project. The export has no history before the link
@@ -44,12 +48,6 @@ let bigQueryClient: BigQuery | null = null;
 function bq(): BigQuery {
   bigQueryClient ??= new BigQuery();
   return bigQueryClient;
-}
-
-function addDays(dayYmd: string, days: number): string {
-  const d = new Date(`${dayYmd}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return utcYmd(d);
 }
 
 const suffix = (dayYmd: string): string => dayYmd.replace(/-/g, "");
@@ -157,13 +155,17 @@ async function syncDay(dayYmd: string): Promise<number> {
 async function syncRange(startYmd: string, endYmd: string): Promise<number> {
   let days = 0;
   for (let d = startYmd; d <= endYmd; d = addDays(d, 1)) {
-    try {
-      await syncDay(d);
+    // The other aggregates run alongside; they never throw.
+    const [paths] = await Promise.allSettled([syncDay(d), syncInsightsDay(d)]);
+    if (paths.status === "fulfilled") {
       days++;
-    } catch (e) {
+    } else {
       // A day with no export table yet (today, or before the link) throws
       // "not found" — skip it rather than failing the whole range.
-      logger.warn("syncUninstallPaths: day skipped", { day: d, error: String(e) });
+      logger.warn("syncUninstallPaths: day skipped", {
+        day: d,
+        error: String(paths.reason),
+      });
     }
   }
   return days;

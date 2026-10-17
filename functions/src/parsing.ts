@@ -185,3 +185,120 @@ export function parseRealtimeCountries(
     };
   });
 }
+
+/** `YYYY-MM-DD` shifted by [days] (negative goes back). */
+export function addDays(dayYmd: string, days: number): string {
+  const d = new Date(`${dayYmd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return utcYmd(d);
+}
+
+/** One row of the AdMob health report: requests, fills and impressions for
+ * an app, ad format and app version on one day. */
+export interface AdHealthRow {
+  date: string;
+  appId: string;
+  format: string;
+  version: string;
+  requests: number;
+  matched: number;
+  impressions: number;
+}
+
+/** What an `ad_health_daily` day-doc holds per platform, format and
+ * version. Empty formats and versions read "unknown". */
+export interface AdHealthEntry {
+  platform: "ios" | "android" | "other";
+  format: string;
+  version: string;
+  requests: number;
+  matched: number;
+  impressions: number;
+}
+
+/** AdMob health rows grouped per day, with the app id resolved to a
+ * platform, the format lower-cased and repeated keys summed. */
+export function aggregateAdHealthByDate(
+  rows: AdHealthRow[],
+  iosAppId: string,
+  androidAppId: string,
+): Map<string, AdHealthEntry[]> {
+  const byDate = new Map<string, Map<string, AdHealthEntry>>();
+  for (const row of rows) {
+    const platform =
+      row.appId === iosAppId
+        ? "ios"
+        : row.appId === androidAppId
+          ? "android"
+          : "other";
+    const format = row.format.trim().toLowerCase() || "unknown";
+    const version = row.version.trim() || "unknown";
+    const key = `${platform}|${format}|${version}`;
+    const day = byDate.get(row.date) ?? new Map<string, AdHealthEntry>();
+    const entry = day.get(key) ?? {
+      platform,
+      format,
+      version,
+      requests: 0,
+      matched: 0,
+      impressions: 0,
+    };
+    entry.requests += row.requests;
+    entry.matched += row.matched;
+    entry.impressions += row.impressions;
+    day.set(key, entry);
+    byDate.set(row.date, day);
+  }
+  return new Map(
+    [...byDate].map(([date, day]) => [date, [...day.values()]]),
+  );
+}
+
+/** Active users of one platform and app version on one day. */
+export interface VersionUsers {
+  platform: string;
+  version: string;
+  users: number;
+}
+
+/** Rows of a GA4 report with dimensions `[date, platform, appVersion]` and
+ * metric `activeUsers`, grouped per day. GA4's "(not set)" and empty
+ * versions read "unknown"; rows with no users are dropped. */
+export function parseVersionRows(
+  rows: ReportRow[] | null | undefined,
+): Map<string, VersionUsers[]> {
+  const byDate = new Map<string, VersionUsers[]>();
+  for (const row of rows ?? []) {
+    const rawDate = row.dimensionValues?.[0]?.value;
+    if (!rawDate) continue;
+    const users = Number(row.metricValues?.[0]?.value ?? "0") || 0;
+    if (users <= 0) continue;
+    const rawVersion = row.dimensionValues?.[2]?.value ?? "";
+    const date = compactDateToYmd(rawDate);
+    const day = byDate.get(date) ?? [];
+    day.push({
+      platform: row.dimensionValues?.[1]?.value || "unknown",
+      version:
+        rawVersion === "" || rawVersion === "(not set)" ? "unknown" : rawVersion,
+      users,
+    });
+    byDate.set(date, day);
+  }
+  return byDate;
+}
+
+/** Days after install at which retention is measured. */
+export const RETENTION_OFFSETS = [1, 7, 30] as const;
+
+/** The `ga4_retention_daily` field a cohort fills when its users are seen
+ * on [dayYmd]: "d1", "d7" or "d30", or null for any other gap (the
+ * install day itself included). */
+export function retentionFieldFor(
+  cohortYmd: string,
+  dayYmd: string,
+): string | null {
+  for (const offset of RETENTION_OFFSETS) {
+    if (addDays(cohortYmd, offset) === dayYmd) return `d${offset}`;
+  }
+  return null;
+}

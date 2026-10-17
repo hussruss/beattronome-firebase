@@ -6,7 +6,7 @@
 // functions/scripts/get-admob-refresh-token.mjs for the one-time bootstrap.
 
 import { logger } from "firebase-functions/v2";
-import { compactDateToYmd } from "./parsing";
+import { AdHealthRow, compactDateToYmd } from "./parsing";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
@@ -78,9 +78,13 @@ function ymdToDateObj(ymd: string): { year: number; month: number; day: number }
   return { year: y, month: m, day: d };
 }
 
-export async function fetchAdMobEarnings(
+/** Runs one Network Report over the params' date range and apps, with the
+ * given dimensions and metrics, and returns its raw rows. */
+async function runNetworkReport(
   params: FetchEarningsParams,
-): Promise<DailyAppEarnings[]> {
+  dimensions: string[],
+  metrics: string[],
+): Promise<ReportRow[]> {
   const accessToken = await getAccessToken(params.creds);
 
   const reportSpec: Record<string, unknown> = {
@@ -88,8 +92,8 @@ export async function fetchAdMobEarnings(
       startDate: ymdToDateObj(params.startDate),
       endDate: ymdToDateObj(params.endDate),
     },
-    dimensions: ["DATE", "APP"],
-    metrics: ["ESTIMATED_EARNINGS", "IMPRESSIONS"],
+    dimensions,
+    metrics,
     localizationSettings: { currencyCode: "USD", languageCode: "en-US" },
     timeZone: params.timeZone ?? "America/Los_Angeles",
   };
@@ -119,17 +123,26 @@ export async function fetchAdMobEarnings(
   // AdMob streams the response as a JSON array whose elements are header /
   // row / footer objects. Some accounts get NDJSON; handle both shapes.
   const text = await res.text();
-  let rows: ReportRow[];
   try {
     const parsed = JSON.parse(text);
-    rows = Array.isArray(parsed) ? (parsed as ReportRow[]) : [parsed];
+    return Array.isArray(parsed) ? (parsed as ReportRow[]) : [parsed];
   } catch {
-    rows = text
+    return text
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => JSON.parse(line) as ReportRow);
   }
+}
+
+export async function fetchAdMobEarnings(
+  params: FetchEarningsParams,
+): Promise<DailyAppEarnings[]> {
+  const rows = await runNetworkReport(
+    params,
+    ["DATE", "APP"],
+    ["ESTIMATED_EARNINGS", "IMPRESSIONS"],
+  );
 
   const out: DailyAppEarnings[] = [];
   for (const r of rows) {
@@ -145,6 +158,46 @@ export async function fetchAdMobEarnings(
   }
 
   logger.info("AdMob report parsed", {
+    publisher: params.publisherId,
+    rows: out.length,
+    range: `${params.startDate}..${params.endDate}`,
+  });
+  return out;
+}
+
+/** Requests, matched requests and impressions per day, app, ad format and
+ * app version: the numbers behind match rate and show rate. */
+export async function fetchAdMobHealth(
+  params: FetchEarningsParams,
+): Promise<AdHealthRow[]> {
+  const rows = await runNetworkReport(
+    params,
+    ["DATE", "APP", "FORMAT", "APP_VERSION_NAME"],
+    ["AD_REQUESTS", "MATCHED_REQUESTS", "IMPRESSIONS"],
+  );
+
+  const int = (v: { integerValue?: string } | undefined): number =>
+    v?.integerValue ? Number(v.integerValue) : 0;
+  const out: AdHealthRow[] = [];
+  for (const r of rows) {
+    if (!r.row) continue;
+    const dims = r.row.dimensionValues;
+    const metrics = r.row.metricValues;
+    const dateRaw = dims?.DATE?.value;
+    const appId = dims?.APP?.value;
+    if (!dateRaw || !appId) continue;
+    out.push({
+      date: compactDateToYmd(dateRaw),
+      appId,
+      format: dims?.FORMAT?.value ?? "",
+      version: dims?.APP_VERSION_NAME?.value ?? "",
+      requests: int(metrics?.AD_REQUESTS),
+      matched: int(metrics?.MATCHED_REQUESTS),
+      impressions: int(metrics?.IMPRESSIONS),
+    });
+  }
+
+  logger.info("AdMob health report parsed", {
     publisher: params.publisherId,
     rows: out.length,
     range: `${params.startDate}..${params.endDate}`,

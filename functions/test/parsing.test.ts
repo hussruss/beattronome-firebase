@@ -3,6 +3,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  addDays,
+  aggregateAdHealthByDate,
   aggregateEarningsByDate,
   compactDateToYmd,
   decodePlayCsv,
@@ -11,6 +13,8 @@ import {
   parseCsv,
   parseRealtimeCountries,
   parseTsv,
+  parseVersionRows,
+  retentionFieldFor,
   sumNumericColumnsByDate,
   tally,
   utcYmd,
@@ -140,4 +144,82 @@ test("parseRealtimeCountries keeps the ISO code for the flag", () => {
     ],
   );
   assert.deepEqual(parseRealtimeCountries(undefined), []);
+});
+
+test("addDays crosses month and year boundaries both ways", () => {
+  assert.equal(addDays("2026-10-31", 1), "2026-11-01");
+  assert.equal(addDays("2026-01-01", -1), "2025-12-31");
+  assert.equal(addDays("2026-10-15", -30), "2026-09-15");
+});
+
+test("aggregateAdHealthByDate splits by platform and sums repeated keys", () => {
+  const byDate = aggregateAdHealthByDate(
+    [
+      {
+        date: "2026-10-01", appId: "ios", format: "INTERSTITIAL",
+        version: "1.6.0", requests: 10, matched: 9, impressions: 5,
+      },
+      {
+        date: "2026-10-01", appId: "ios", format: "interstitial",
+        version: "1.6.0", requests: 2, matched: 2, impressions: 1,
+      },
+      {
+        date: "2026-10-01", appId: "android", format: "REWARDED",
+        version: "", requests: 4, matched: 4, impressions: 0,
+      },
+      {
+        date: "2026-10-02", appId: "web", format: "", version: "1.5.2",
+        requests: 1, matched: 0, impressions: 0,
+      },
+    ],
+    "ios",
+    "android",
+  );
+  assert.deepEqual(byDate.get("2026-10-01"), [
+    {
+      platform: "ios", format: "interstitial", version: "1.6.0",
+      requests: 12, matched: 11, impressions: 6,
+    },
+    {
+      platform: "android", format: "rewarded", version: "unknown",
+      requests: 4, matched: 4, impressions: 0,
+    },
+  ]);
+  assert.deepEqual(byDate.get("2026-10-02"), [
+    {
+      platform: "other", format: "unknown", version: "1.5.2",
+      requests: 1, matched: 0, impressions: 0,
+    },
+  ]);
+});
+
+test("parseVersionRows groups per day and names unset versions", () => {
+  const byDate = parseVersionRows([
+    {
+      dimensionValues: [{ value: "20261001" }, { value: "Android" }, { value: "1.6.0" }],
+      metricValues: [{ value: "12" }],
+    },
+    {
+      dimensionValues: [{ value: "20261001" }, { value: "iOS" }, { value: "(not set)" }],
+      metricValues: [{ value: "3" }],
+    },
+    {
+      dimensionValues: [{ value: "20261002" }, { value: "iOS" }, { value: "1.5.2" }],
+      metricValues: [{ value: "0" }],
+    },
+  ]);
+  assert.deepEqual(byDate.get("2026-10-01"), [
+    { platform: "Android", version: "1.6.0", users: 12 },
+    { platform: "iOS", version: "unknown", users: 3 },
+  ]);
+  assert.equal(byDate.has("2026-10-02"), false);
+  assert.equal(parseVersionRows(null).size, 0);
+});
+
+test("retentionFieldFor names the day-1, day-7 and day-30 gaps only", () => {
+  assert.equal(retentionFieldFor("2026-10-01", "2026-10-02"), "d1");
+  assert.equal(retentionFieldFor("2026-10-01", "2026-10-08"), "d7");
+  assert.equal(retentionFieldFor("2026-09-30", "2026-10-30"), "d30");
+  assert.equal(retentionFieldFor("2026-10-01", "2026-10-01"), null);
+  assert.equal(retentionFieldFor("2026-10-01", "2026-10-03"), null);
 });

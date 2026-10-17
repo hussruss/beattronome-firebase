@@ -7,8 +7,14 @@ import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import {
   AdMobOAuthCreds,
   fetchAdMobEarnings,
+  fetchAdMobHealth,
 } from "./admobClient";
-import { aggregateEarningsByDate, DailyTotals, utcYmd } from "./parsing";
+import {
+  aggregateAdHealthByDate,
+  aggregateEarningsByDate,
+  DailyTotals,
+  utcYmd,
+} from "./parsing";
 
 const ADMOB_OAUTH_CLIENT_ID = defineSecret("ADMOB_OAUTH_CLIENT_ID");
 const ADMOB_OAUTH_CLIENT_SECRET = defineSecret("ADMOB_OAUTH_CLIENT_SECRET");
@@ -18,6 +24,9 @@ const PUBLISHER_ID = "pub-4008135751850421";
 const IOS_APP_ID = "ca-app-pub-4008135751850421~7022994604";
 const ANDROID_APP_ID = "ca-app-pub-4008135751850421~8473548475";
 const AD_REVENUE_COLLECTION = "ad_revenue";
+// Requests, matched requests and impressions per platform, format and app
+// version: the dashboard's ad health card.
+const AD_HEALTH_COLLECTION = "ad_health_daily";
 
 // AdMob estimates settle over ~72h, so we re-fetch the last 4 days every run.
 const DAILY_LOOKBACK_DAYS = 4;
@@ -57,6 +66,38 @@ async function writeDailyDocs(
   return byDate.size;
 }
 
+/** One `ad_health_daily` doc per day, replaced on every sync. */
+async function syncHealth(startYmd: string, endYmd: string): Promise<number> {
+  const rows = await fetchAdMobHealth({
+    creds: creds(),
+    publisherId: PUBLISHER_ID,
+    appIds: [IOS_APP_ID, ANDROID_APP_ID],
+    startDate: startYmd,
+    endDate: endYmd,
+  });
+  const byDate = aggregateAdHealthByDate(rows, IOS_APP_ID, ANDROID_APP_ID);
+  if (byDate.size === 0) return 0;
+  const db = getFirestore();
+  const col = db.collection(AD_HEALTH_COLLECTION);
+  // BulkWriter, not a batch: a long backfill would pass a batch's 500 cap.
+  const writer = db.bulkWriter();
+  const failures: unknown[] = [];
+  for (const [date, entries] of byDate.entries()) {
+    writer
+      .set(col.doc(date), {
+        date,
+        rows: entries,
+        fetched_at: FieldValue.serverTimestamp(),
+      })
+      .catch((e: unknown) => failures.push(e));
+  }
+  await writer.close();
+  if (failures.length > 0) {
+    throw new Error(`${failures.length} ad health write(s) failed`);
+  }
+  return byDate.size;
+}
+
 async function syncRange(startYmd: string, endYmd: string): Promise<number> {
   const rows = await fetchAdMobEarnings({
     creds: creds(),
@@ -66,7 +107,15 @@ async function syncRange(startYmd: string, endYmd: string): Promise<number> {
     endDate: endYmd,
   });
   const byDate = aggregateEarningsByDate(rows, IOS_APP_ID, ANDROID_APP_ID);
-  return writeDailyDocs(byDate);
+  const written = await writeDailyDocs(byDate);
+  // The health report is extra: if it fails, revenue (and ARPU) still sync.
+  try {
+    const healthDays = await syncHealth(startYmd, endYmd);
+    logger.info("syncAdMobRevenue: health synced", { healthDays });
+  } catch (e) {
+    logger.warn("syncAdMobRevenue: health report failed", { error: String(e) });
+  }
+  return written;
 }
 
 export const syncAdMobRevenue = onSchedule(
