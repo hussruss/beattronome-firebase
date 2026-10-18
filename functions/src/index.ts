@@ -23,3 +23,4 @@ export {
   aggregatePracticeNow,
 } from "./aggregatePractice";
 export { mergeGuestData } from "./mergeGuestData";
+export { renumberExerciseNow } from "./renumberExercise";
