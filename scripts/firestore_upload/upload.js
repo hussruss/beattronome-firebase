@@ -7,8 +7,10 @@ const path = require('path');
 // Download from Firebase Console -> Project Settings -> Service accounts
 const SERVICE_ACCOUNT_KEY_PATH = './service-account-key.json';
 
-// Path to your data JSON file
-const DATA_FILE_PATH = '../../assets/data/rudiments.json';
+// The catalog JSON lives in the app repo, checked out next to this one.
+// DATA_FILE overrides it.
+const DATA_FILE_PATH = process.env.DATA_FILE ||
+    '../../../beattronome/assets/data/rudiments.json';
 
 // Collection name in Firestore
 const COLLECTION_NAME = 'rudiments';
@@ -51,7 +53,7 @@ async function uploadData() {
 
     try {
         // Read data file
-        const dataPath = path.join(__dirname, DATA_FILE_PATH);
+        const dataPath = path.resolve(__dirname, DATA_FILE_PATH);
         if (!fs.existsSync(dataPath)) {
             console.error(`Error: Data file not found at ${dataPath}`);
             process.exit(1);

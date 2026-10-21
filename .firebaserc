@@ -1,0 +1,7 @@
+{
+  "projects": {
+    "default": "beattronome-dev",
+    "dev": "beattronome-dev",
+    "prod": "beattronome-ea8b2"
+  }
+}

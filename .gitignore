@@ -1,0 +1,21 @@
+node_modules/
+*.log
+.DS_Store
+
+# Firebase CLI
+.firebase/
+.firebase.rc.json
+
+# Remote Config snapshots taken by scripts/rc.sh
+.rc/
+
+# Functions build output and local config (PLAY_CONSOLE_BUCKET lives in
+# functions/.env; secrets live in Secret Manager)
+functions/lib/
+functions/.env
+functions/.runtimeconfig.json
+
+# Data scripts: service account key and local move lists
+scripts/firestore_upload/service-account-key.json
+scripts/firestore_upload/rudiment_moves.json
+scripts/firestore_upload/pattern_moves.json

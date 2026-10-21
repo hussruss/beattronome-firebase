@@ -2,7 +2,7 @@ name: firestore-rules
 
 on:
   push:
-    paths: ["firestore.rules", "storage.rules", "rules-tests/**", ".github/workflows/firestore-rules.yml"]
+    paths: ["firestore.rules", "storage.rules", "firebase.json", "rules-tests/**", ".github/workflows/firestore-rules.yml"]
   pull_request:
     paths: ["firestore.rules", "storage.rules", "rules-tests/**"]
 

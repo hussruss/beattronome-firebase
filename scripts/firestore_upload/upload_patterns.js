@@ -4,7 +4,10 @@ const path = require('path');
 
 // 1. CONFIGURATION
 const SERVICE_ACCOUNT_KEY_PATH = './service-account-key.json';
-const DATA_FILE_PATH = '../../assets/data/patterns.json';
+// The catalog JSON lives in the app repo, checked out next to this one.
+// DATA_FILE overrides it.
+const DATA_FILE_PATH = process.env.DATA_FILE ||
+    '../../../beattronome/assets/data/patterns.json';
 const COLLECTION_NAME = 'patterns'; // Using a separate collection for patterns
 
 async function uploadPatterns() {
@@ -33,7 +36,7 @@ async function uploadPatterns() {
     const db = admin.firestore();
 
     try {
-        const dataPath = path.join(__dirname, DATA_FILE_PATH);
+        const dataPath = path.resolve(__dirname, DATA_FILE_PATH);
         const patterns = JSON.parse(fs.readFileSync(dataPath));
 
         console.log(`Found ${patterns.length} patterns in JSON file.`);
