@@ -4,6 +4,7 @@ export { cleanupDuplicates } from "./cleanupDuplicates";
 export { notifyOnNewInstallation } from "./notifyOnNewInstallation";
 export { notifyOnNewUserSession } from "./notifyOnNewUserSession";
 export { notifyOnNewCustomer } from "./notifyOnNewCustomer";
+export { notifyOnPaywallLoadFailed } from "./notifyOnPaywallLoadFailed";
 export {
   syncAdMobRevenue,
   syncAdMobRevenueNow,

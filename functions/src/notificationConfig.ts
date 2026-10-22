@@ -8,12 +8,14 @@ const CONFIG_DOC = "notifications";
 export type NotificationKey =
   | "on_new_installation"
   | "on_new_user_session"
-  | "on_new_customer";
+  | "on_new_customer"
+  | "on_paywall_load_failed";
 
 interface NotificationConfigDoc {
   on_new_installation?: boolean;
   on_new_user_session?: boolean;
   on_new_customer?: boolean;
+  on_paywall_load_failed?: boolean;
 }
 
 export async function isNotificationEnabled(
