@@ -3,7 +3,11 @@ import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { logger } from "firebase-functions/v2";
 import { sendPushToAdmins } from "./fcmHelpers";
 import { isNotificationEnabled } from "./notificationConfig";
-import { ActivityLogDoc, paywallFailurePush } from "./paywallPush";
+import {
+  ActivityLogDoc,
+  isOfflineFailure,
+  paywallFailurePush,
+} from "./paywallPush";
 
 const EVENT_NAME = "paywall_load_failed";
 
@@ -18,6 +22,10 @@ export const notifyOnPaywallLoadFailed = onDocumentCreated(
   async (event) => {
     const data = event.data?.data() as ActivityLogDoc | undefined;
     if (data?.name !== EVENT_NAME) return;
+    if (isOfflineFailure(data)) {
+      logger.info("notifyOnPaywallLoadFailed: device offline, no push");
+      return;
+    }
     if (!(await isNotificationEnabled("on_paywall_load_failed"))) {
       logger.info("notifyOnPaywallLoadFailed: muted via config");
       return;

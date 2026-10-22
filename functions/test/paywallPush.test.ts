@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { paywallFailurePush } from "../src/paywallPush.ts";
+import { isOfflineFailure, paywallFailurePush } from "../src/paywallPush.ts";
 
 test("paywall push leads with RevenueCat's code", () => {
   const push = paywallFailurePush({
@@ -26,4 +26,17 @@ test("paywall push falls back to the generic error from older builds", () => {
     payload: { error: "Failed to load subscription packages" },
   });
   assert.equal(push.body, "Failed to load subscription packages");
+});
+
+test("offline failures are recognized and skipped", () => {
+  assert.equal(
+    isOfflineFailure({ payload: { has_connectivity: "false" } }),
+    true,
+  );
+  assert.equal(
+    isOfflineFailure({ payload: { has_connectivity: "true" } }),
+    false,
+  );
+  // Older builds don't send the flag: they still notify.
+  assert.equal(isOfflineFailure({ payload: {} }), false);
 });

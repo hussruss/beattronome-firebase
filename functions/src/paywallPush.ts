@@ -8,6 +8,7 @@ export interface ActivityLogDoc {
     code?: string;
     error?: string;
     error_message?: string;
+    has_connectivity?: string;
   };
   platform?: string;
   app_version?: string;
@@ -29,4 +30,10 @@ export function paywallFailurePush(
     .filter(Boolean)
     .join(" ");
   return { title: "Paywall failed to load", body };
+}
+
+// No network on the device: nothing to fix on our side, so no push. The
+// failure still stays in the activity log.
+export function isOfflineFailure(data: ActivityLogDoc): boolean {
+  return data.payload?.has_connectivity === "false";
 }
