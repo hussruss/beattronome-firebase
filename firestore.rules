@@ -232,6 +232,12 @@ service cloud.firestore {
 
     // --- BLOQUEO FINAL ---
     // Bloquear TODO lo demás (Siempre deja esto al final)
+    // One-off link list for the backoffice "Ligas" page and the
+    // sendLinkBatch function. Temporary: remove with the module.
+    match /link_tasks/{id} { allow read, write: if isAdmin(); }
+    match /link_batches/{id} { allow read, write: if isAdmin(); }
+    match /link_tasks_config/{id} { allow read, write: if isAdmin(); }
+
     match /{document=**} {
       allow read, write: if false;
     }
